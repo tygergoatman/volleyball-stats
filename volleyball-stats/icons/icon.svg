@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Volleyball Stats">
+	<defs>
+		<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+			<stop offset="0" stop-color="#1d3a2e" />
+			<stop offset="1" stop-color="#0f1115" />
+		</linearGradient>
+		<clipPath id="ball">
+			<circle cx="256" cy="240" r="132" />
+		</clipPath>
+	</defs>
+	<rect width="512" height="512" rx="112" fill="url(#bg)" />
+	<circle cx="256" cy="240" r="132" fill="#f4f7fb" />
+	<!-- Seams: three arcs of radius 198 whose centres sit 244 from the ball centre. -->
+	<g clip-path="url(#ball)" fill="none" stroke="#16232c" stroke-width="15">
+		<circle cx="256" cy="484" r="198" />
+		<circle cx="44.7" cy="118" r="198" />
+		<circle cx="467.3" cy="118" r="198" />
+	</g>
+	<g fill="#2f81f7">
+		<rect x="120" y="398" width="52" height="52" rx="14" />
+		<rect x="196" y="398" width="52" height="52" rx="14" />
+		<rect x="272" y="398" width="52" height="52" rx="14" />
+		<rect x="348" y="398" width="52" height="52" rx="14" fill="#f59e0b" />
+	</g>
+</svg>
