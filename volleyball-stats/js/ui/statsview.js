@@ -111,7 +111,12 @@ export function renderStats(root, store) {
                 disabled: lines.size === 0,
                 onClick: () => {
                     const stamp = new Date().toISOString().slice(0, 10);
-                    downloadText(`stats-${view.scope}-${stamp}.csv`, toCsv(store.roster, lines), 'text/csv');
+                    const team = store.activeTeam?.name?.toLowerCase().replace(/\W+/g, '-') ?? 'team';
+                    downloadText(
+                        `stats-${team}-${view.scope}-${stamp}.csv`,
+                        toCsv(playersWithData(store, lines), lines),
+                        'text/csv',
+                    );
                     toast('CSV downloaded');
                 },
             }),
@@ -141,13 +146,17 @@ function collect(store) {
             }`,
         };
     }
-    const allSets = store.state.matches.flatMap((m) => m.sets);
+    // Season totals stay within one team — a JV kill does not belong in a
+    // Varsity line. A player who swings between teams keeps separate totals for
+    // each, because each is filtered by the matches that team played.
+    const team = store.activeTeam;
+    const teamMatches = team ? store.matchesFor(team.id) : store.state.matches;
     return {
-        lines: aggregateSeason(store.state.matches),
-        sets: allSets,
-        scopeLabel: `${store.state.season.name} · ${store.state.matches.length} match${
-            store.state.matches.length === 1 ? '' : 'es'
-        }`,
+        lines: aggregateSeason(teamMatches),
+        sets: teamMatches.flatMap((m) => m.sets),
+        scopeLabel: `${team ? `${team.fullName} · ` : ''}${store.state.season.name} · ${
+            teamMatches.length
+        } match${teamMatches.length === 1 ? '' : 'es'}`,
     };
 }
 
@@ -166,9 +175,23 @@ function scopeButton(store, scope, label, disabled) {
 
 /* ------------------------------------------------------------------ table */
 
+/**
+ * The current roster, plus anyone with recorded stats who has since left it —
+ * so a mid-season roster change never silently drops a player's numbers.
+ */
+function playersWithData(store, lines) {
+    const roster = store.roster;
+    const onRoster = new Set(roster.map((p) => p.id));
+    const departed = [...lines.keys()]
+        .filter((id) => !onRoster.has(id))
+        .map((id) => store.player(id))
+        .filter(Boolean);
+    return [...roster, ...departed];
+}
+
 function statTable(store, lines) {
     const columns = COLUMNS[view.category];
-    const rows = store.roster
+    const rows = playersWithData(store, lines)
         .map((player) => {
             const line = lines.get(player.id) ?? emptyLine();
             return { player, line, derived: derive(line) };

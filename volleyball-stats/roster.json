@@ -1,0 +1,52 @@
+{
+    "_readme": "Shared rosters for the whole program. Edit this file on GitHub and every coach's app picks up the change the next time it loads with a connection. Read ROSTER.md before editing — the one rule that matters is that a player's id must be unique and must never change or be reused.",
+    "version": 1,
+    "updated": "2026-08-06",
+    "teams": [
+        {
+            "id": "ms",
+            "name": "MS",
+            "fullName": "Middle School",
+            "players": [
+                { "id": "ms-1", "number": "1", "name": "Player One", "position": "OH" },
+                { "id": "ms-2", "number": "2", "name": "Player Two", "position": "S", "isSetter": true },
+                { "id": "ms-3", "number": "3", "name": "Player Three", "position": "MB" },
+                { "id": "ms-4", "number": "4", "name": "Player Four", "position": "OH" },
+                { "id": "ms-5", "number": "5", "name": "Player Five", "position": "MB" },
+                { "id": "ms-6", "number": "6", "name": "Player Six", "position": "OPP" },
+                { "id": "ms-7", "number": "7", "name": "Player Seven", "position": "DS" },
+                { "id": "ms-8", "number": "8", "name": "Player Eight", "position": "L", "isLibero": true }
+            ]
+        },
+        {
+            "id": "jv",
+            "name": "JV",
+            "fullName": "Junior Varsity",
+            "players": [
+                { "id": "jv-1", "number": "1", "name": "Player One", "position": "OH" },
+                { "id": "jv-2", "number": "2", "name": "Player Two", "position": "S", "isSetter": true },
+                { "id": "jv-3", "number": "3", "name": "Player Three", "position": "MB" },
+                { "id": "jv-4", "number": "4", "name": "Player Four", "position": "OH" },
+                { "id": "jv-5", "number": "5", "name": "Player Five", "position": "MB" },
+                { "id": "jv-6", "number": "6", "name": "Player Six", "position": "OPP" },
+                { "id": "jv-7", "number": "7", "name": "Player Seven", "position": "DS" },
+                { "id": "jv-8", "number": "8", "name": "Player Eight", "position": "L", "isLibero": true }
+            ]
+        },
+        {
+            "id": "var",
+            "name": "Var",
+            "fullName": "Varsity",
+            "players": [
+                { "id": "var-1", "number": "1", "name": "Player One", "position": "OH" },
+                { "id": "var-2", "number": "2", "name": "Player Two", "position": "S", "isSetter": true },
+                { "id": "var-3", "number": "3", "name": "Player Three", "position": "MB" },
+                { "id": "var-4", "number": "4", "name": "Player Four", "position": "OH" },
+                { "id": "var-5", "number": "5", "name": "Player Five", "position": "MB" },
+                { "id": "var-6", "number": "6", "name": "Player Six", "position": "OPP" },
+                { "id": "var-7", "number": "7", "name": "Player Seven", "position": "DS" },
+                { "id": "var-8", "number": "8", "name": "Player Eight", "position": "L", "isLibero": true }
+            ]
+        }
+    ]
+}

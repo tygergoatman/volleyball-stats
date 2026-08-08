@@ -1,7 +1,7 @@
 /** Point-by-point log for the active set, plus match and set navigation. */
 
-import { computeSetState, describeEvent } from '../model.js';
-import { el, mount, toast, confirmDialog } from './dom.js';
+import { STAT_GROUPS, TEAM_EVENTS, computeSetState, describeEvent, matchScore } from '../model.js';
+import { el, mount, openSheet, closeSheet, toast, confirmDialog } from './dom.js';
 
 export function renderLog(root, store, actions) {
     const match = store.activeMatch;
@@ -25,6 +25,8 @@ export function renderLog(root, store, actions) {
 }
 
 function matchPanel(store, match, actions) {
+    const score = matchScore(match);
+
     return el('section.panel', {}, [
         el('div.panel__head', {}, [
             el('h2.panel__title', { text: `vs ${match.opponent}` }),
@@ -34,7 +36,11 @@ function matchPanel(store, match, actions) {
                 onClick: actions.pickMatch,
             }),
         ]),
-        el('p.panel__hint', { text: [match.date, match.venue].filter(Boolean).join(' · ') }),
+        el('p.panel__hint', {
+            text: [match.date, match.venue, score.format.label, match.complete ? 'ended' : null]
+                .filter(Boolean)
+                .join(' · '),
+        }),
         el(
             'div.setline',
             {},
@@ -46,10 +52,13 @@ function matchPanel(store, match, actions) {
                 });
             }),
         ),
+        el('p.panel__hint', { text: `Sets ${score.us}–${score.them}` }),
     ]);
 }
 
 function setPanel(store, match) {
+    const active = store.activeSet;
+
     return el('section.panel', {}, [
         el('h2.panel__title', { text: 'Sets' }),
         el('div.segmented.segmented--wrap', {}, [
@@ -61,12 +70,31 @@ function setPanel(store, match) {
                     onClick: () => store.setActiveSet(set.id),
                 }),
             ),
-            el('button.seg.seg--add', {
-                type: 'button',
-                text: '+ New set',
-                onClick: () => store.setActiveSet(null),
-            }),
+            !match.complete &&
+                el('button.seg.seg--add', {
+                    type: 'button',
+                    text: '+ New set',
+                    onClick: () => store.setActiveSet(null),
+                }),
         ]),
+        active &&
+            el('button.btn.btn--danger.btn--sm', {
+                type: 'button',
+                text: `Delete Set ${active.number}`,
+                onClick: async () => {
+                    const { us, them } = computeSetState(active);
+                    const confirmed = await confirmDialog({
+                        title: `Delete set ${active.number}?`,
+                        message: `Every stat recorded in this set (${us}–${them}) is deleted for good. Later sets are renumbered.`,
+                        confirmLabel: 'Delete Set',
+                        danger: true,
+                    });
+                    if (confirmed) {
+                        store.deleteSet(active.id);
+                        toast('Set deleted', 'warn');
+                    }
+                },
+            }),
     ]);
 }
 
@@ -86,6 +114,7 @@ function eventPanel(store) {
             el('h2.panel__title', { text: `Set ${set.number} log` }),
             el('span.panel__count', { text: `${timeline.length} entries` }),
         ]),
+        el('p.panel__hint', { text: 'Tap an entry to correct who it was credited to, or what it was.' }),
         timeline.length === 0
             ? el('p.panel__hint', { text: 'Nothing recorded yet.' })
             : el(
@@ -99,28 +128,181 @@ function eventPanel(store) {
                               el('span.log__score', {
                                   text: entry.winner ? `${entry.scoreAfter.us}–${entry.scoreAfter.them}` : '·',
                               }),
-                              el('span.log__text', { text: describeEvent(entry.event, lookup) }),
-                              el('span.log__rot', { text: `R${entry.rotationAtEvent}` }),
-                              el('button.log__del', {
+                              el('button.log__text', {
                                   type: 'button',
-                                  'aria-label': 'Delete entry',
-                                  text: '✕',
-                                  onClick: async () => {
-                                      const confirmed = await confirmDialog({
-                                          title: 'Delete this entry?',
-                                          message:
-                                              'The score and rotations after it will be recalculated from the remaining entries.',
-                                          confirmLabel: 'Delete',
-                                          danger: true,
-                                      });
-                                      if (confirmed) {
-                                          store.deleteEvent(entry.event.id);
-                                          toast('Entry deleted', 'warn');
-                                      }
-                                  },
+                                  text: describeEvent(entry.event, lookup),
+                                  onClick: () => openEntrySheet(store, entry, set),
                               }),
+                              entry.event.editedAt &&
+                                  el('span.log__edited', { text: 'edited', title: 'Corrected later' }),
+                              el('span.log__rot', { text: `R${entry.rotationAtEvent}` }),
                           ]),
                       ),
               ),
     ]);
+}
+
+/* ------------------------------------------------------------ entry editor */
+
+/**
+ * Correct one log entry. Both pickers apply immediately and the sheet stays
+ * open, because the common case — the wrong player was credited during a rally
+ * that carried on — often comes with a second correction right behind it.
+ */
+function openEntrySheet(store, entry, set) {
+    const event = entry.event;
+
+    const body = el('div.form');
+    const rerender = () => {
+        const current = store.activeSet?.events.find((e) => e.id === event.id);
+        if (!current) {
+            closeSheet();
+            return;
+        }
+        mount(body, ...build(current));
+    };
+
+    function build(current) {
+        const parts = [];
+
+        if (current.type === 'stat') {
+            parts.push(
+                el('div.field', {}, [
+                    el('span.field__label', { text: 'Credited to' }),
+                    el(
+                        'div.chipgrid',
+                        {},
+                        playerChoices(store, set).map((player) =>
+                            el(
+                                'button.chip',
+                                {
+                                    type: 'button',
+                                    class: player.id === current.playerId ? 'chip--armed' : '',
+                                    onClick: () => {
+                                        store.updateEvent(current.id, { playerId: player.id });
+                                        toast(`Credited to #${player.number} ${player.name}`);
+                                        rerender();
+                                    },
+                                },
+                                [
+                                    el('span.chip__num', { text: `#${player.number}` }),
+                                    el('span.chip__name', { text: player.name }),
+                                ],
+                            ),
+                        ),
+                    ),
+                ]),
+                el('div.field', {}, [
+                    el('span.field__label', { text: 'Stat' }),
+                    el(
+                        'div.statsheet',
+                        {},
+                        STAT_GROUPS.map((group) =>
+                            el('div.statgroup', { class: `statgroup--${group.accent}` }, [
+                                el('span.statgroup__label', { text: group.label }),
+                                el(
+                                    'div.statgroup__buttons',
+                                    {},
+                                    group.options.map((option) =>
+                                        el('button.statbtn', {
+                                            type: 'button',
+                                            class: `${toneClass(option)}${
+                                                option.code === current.code ? ' statbtn--on' : ''
+                                            }`,
+                                            text: option.label,
+                                            title: option.name,
+                                            onClick: () => {
+                                                store.updateEvent(current.id, { code: option.code });
+                                                toast(option.name);
+                                                rerender();
+                                            },
+                                        }),
+                                    ),
+                                ),
+                            ]),
+                        ),
+                    ),
+                ]),
+            );
+        } else if (current.type === 'team') {
+            parts.push(
+                el('div.field', {}, [
+                    el('span.field__label', { text: 'Outcome' }),
+                    el(
+                        'div.segmented',
+                        {},
+                        TEAM_EVENTS.map((option) =>
+                            el('button.seg', {
+                                type: 'button',
+                                class: option.code === current.code ? 'seg--on' : '',
+                                text: option.name,
+                                onClick: () => {
+                                    store.updateEvent(current.id, { code: option.code });
+                                    toast(option.name);
+                                    rerender();
+                                },
+                            }),
+                        ),
+                    ),
+                ]),
+            );
+        } else {
+            parts.push(
+                el('p.panel__hint', {
+                    text: 'Substitutions cannot be edited in place — delete this one and record it again from the court.',
+                }),
+            );
+        }
+
+        parts.push(
+            el('div.form__actions', {}, [
+                el('button.btn.btn--danger.btn--sm', {
+                    type: 'button',
+                    text: 'Delete entry',
+                    onClick: async () => {
+                        const confirmed = await confirmDialog({
+                            title: 'Delete this entry?',
+                            message: 'The score and rotations after it are recalculated from what is left.',
+                            confirmLabel: 'Delete',
+                            danger: true,
+                        });
+                        if (confirmed) {
+                            store.deleteEvent(current.id);
+                            closeSheet();
+                            toast('Entry deleted', 'warn');
+                        }
+                    },
+                }),
+                el('button.btn.btn--primary', { type: 'button', text: 'Done', onClick: closeSheet }),
+            ]),
+        );
+
+        return parts;
+    }
+
+    rerender();
+    openSheet({
+        title: 'Correct entry',
+        subtitle: entry.winner
+            ? `Was ${entry.scoreAfter.us}–${entry.scoreAfter.them} · rotation ${entry.rotationAtEvent}`
+            : `Rally continued · rotation ${entry.rotationAtEvent}`,
+        body,
+    });
+}
+
+/**
+ * Everyone who could plausibly be credited: the six on court when the entry was
+ * recorded, plus the rest of the roster, since the whole point of editing is
+ * that the wrong person was tapped.
+ */
+function playerChoices(store, set) {
+    const onCourt = new Set(computeSetState(set).lineup.filter(Boolean));
+    const roster = store.roster;
+    return [...roster.filter((p) => onCourt.has(p.id)), ...roster.filter((p) => !onCourt.has(p.id))];
+}
+
+function toneClass(option) {
+    if (option.point === 'us') return 'statbtn--good';
+    if (option.point === 'them') return 'statbtn--bad';
+    return 'statbtn--neutral';
 }

@@ -75,10 +75,19 @@ Done. Launch it from the new icon like any other app.
 
 ---
 
+## Step 7 — Put your real players in
+
+The app ships with placeholder rosters ("Player One", "Player Two"…) for MS, JV and Varsity. Swap
+in your actual players by editing **`roster.json`** in your repository — see
+[ROSTER.md](./ROSTER.md) for the details.
+
+That file is shared: edit it once and every coach's phone picks it up. You do not have to do this
+on each device.
+
 ## Using it courtside
 
-Set up your roster once (Roster tab → **+ Add**), then before each match: **Court** tab →
-**New Match** → tap each spot on the court to place your starting six → **Start Set**.
+Before each match: **Court** tab → **New Match** → pick the team (MS / JV / Var) → tap each spot
+on the court to place your starting six → **Start Set**.
 
 During play: **tap a player, tap the stat.** Two taps, no confirm button.
 
@@ -116,8 +125,24 @@ Two things to know if you change anything:
 
 **The link shows a 404.** Either Pages has not finished building (wait 2 minutes and refresh),
 or the files went in one level too deep. Look at your repository's main page — you should see
-`index.html` listed there directly. If instead you see a single `volleyball-stats` folder, open
-it, and re-upload its contents to the top level.
+`index.html` listed there directly. If instead you see a single `volleyball-stats` folder, see
+the next entry.
+
+**You uploaded the folder instead of its contents.** Nothing is broken and nothing needs
+deleting. Two ways out:
+
+- _Do nothing._ Add the folder name to the end of your link and it just works:
+  `https://YOUR-USERNAME.github.io/volleyball-stats/volleyball-stats/`. Every path inside the
+  app is relative, so it runs correctly at any depth — offline mode and home-screen install
+  included. The only downside is a longer link.
+- _Get the short link back._ Go to
+  `https://github.com/YOUR-USERNAME/volleyball-stats/upload/main` and upload again, this time
+  selecting the files _inside_ the folder. The stray nested copy is then unused; leave it or
+  delete the files one at a time. Afterwards `index.html` should be listed on your
+  repository's main page.
+
+If you already added the app to your home screen from the long link, delete that icon and
+re-add it from the new one — otherwise you will keep launching the old copy.
 
 **The page loads but is unstyled or blank.** Usually a partial upload. Check that `css/app.css`
 and `js/app.js` both exist in the repository.

@@ -5,7 +5,8 @@
  * tested with `node --test` and reused by any UI.
  */
 
-export const SCHEMA_VERSION = 1;
+/** 2 introduced multiple teams, each with its own roster. */
+export const SCHEMA_VERSION = 2;
 
 /* ------------------------------------------------------------------ court */
 
@@ -60,17 +61,11 @@ export const STAT_GROUPS = [
             { code: 'pass2', label: '2', value: 2, point: null, name: 'Good pass' },
             { code: 'pass1', label: '1', value: 1, point: null, name: 'Poor pass' },
             { code: 'pass05', label: '.5', value: 0.5, point: null, name: 'Overpass to their side' },
+            // Sits with the passes because it is the same first-contact decision,
+            // but it counts as a dig and stays out of the passing average. Placed
+            // before the shank so every row ends on its one point-conceding button.
+            { code: 'dig', label: 'D', point: null, name: 'Dig' },
             { code: 'pass0', label: '0', value: 0, point: 'them', name: 'Shank / ace against' },
-        ],
-    },
-    {
-        key: 'attack',
-        label: 'Attack',
-        accent: 'attack',
-        options: [
-            { code: 'kill', label: 'K', point: 'us', name: 'Kill' },
-            { code: 'attackInPlay', label: 'A', point: null, name: 'Attack stays in play' },
-            { code: 'attackErr', label: '0', point: 'them', name: 'Attack error' },
         ],
     },
     {
@@ -85,13 +80,13 @@ export const STAT_GROUPS = [
         ],
     },
     {
-        key: 'serve',
-        label: 'Serve',
-        accent: 'serve',
+        key: 'attack',
+        label: 'Attack',
+        accent: 'attack',
         options: [
-            { code: 'ace', label: 'Ace', point: 'us', name: 'Ace' },
-            { code: 'serveIn', label: 'In', point: null, name: 'Serve in play' },
-            { code: 'serveErr', label: 'Err', point: 'them', name: 'Service error' },
+            { code: 'kill', label: 'K', point: 'us', name: 'Kill' },
+            { code: 'attackInPlay', label: 'A', point: null, name: 'Attack stays in play' },
+            { code: 'attackErr', label: '0', point: 'them', name: 'Attack error' },
         ],
     },
     {
@@ -105,19 +100,30 @@ export const STAT_GROUPS = [
         ],
     },
     {
-        key: 'dig',
-        label: 'Dig',
-        accent: 'dig',
+        key: 'serve',
+        label: 'Serve',
+        accent: 'serve',
         options: [
-            { code: 'dig', label: 'Dig', point: null, name: 'Dig' },
-            { code: 'digErr', label: 'Err', point: 'them', name: 'Dig error' },
+            { code: 'ace', label: 'Ace', point: 'us', name: 'Ace' },
+            { code: 'serveIn', label: 'In', point: null, name: 'Serve in play' },
+            { code: 'serveErr', label: 'Err', point: 'them', name: 'Service error' },
         ],
     },
 ];
 
-/** Flat lookup of every stat option by its code. */
+/**
+ * Codes that no longer have a button but may still appear in saved matches.
+ * They stay in the lookup so replaying an older set scores it the way it was
+ * scored at the time.
+ */
+export const RETIRED_STATS = [
+    { code: 'digErr', label: 'Err', point: 'them', name: 'Dig error', group: 'dig', groupLabel: 'Dig' },
+];
+
+/** Flat lookup of every stat option by its code, retired ones included. */
 export const STAT_BY_CODE = (() => {
     const map = new Map();
+    for (const retired of RETIRED_STATS) map.set(retired.code, { ...retired, retired: true });
     for (const group of STAT_GROUPS) {
         for (const option of group.options) {
             map.set(option.code, { ...option, group: group.key, groupLabel: group.label });
@@ -307,4 +313,58 @@ export function setWinner(us, them, target = 25) {
     if (us >= target && us - them >= 2) return 'us';
     if (them >= target && them - us >= 2) return 'them';
     return null;
+}
+
+/* ----------------------------------------------------------- match format */
+
+export const MATCH_FORMATS = [
+    { sets: 3, label: 'Best of 3', winAt: 2 },
+    { sets: 5, label: 'Best of 5', winAt: 3 },
+];
+
+export const DEFAULT_FORMAT = 3;
+
+export function formatFor(sets) {
+    return MATCH_FORMATS.find((f) => f.sets === sets) ?? MATCH_FORMATS[0];
+}
+
+/**
+ * Score a set is played to. The deciding set — the last one the format allows —
+ * is played to 15; every set before it is played to 25.
+ *
+ * @param {number} setNumber 1-based
+ * @param {number} formatSets 3 or 5
+ * @returns {number}
+ */
+export function targetForSet(setNumber, formatSets = DEFAULT_FORMAT) {
+    return setNumber >= formatSets ? 15 : 25;
+}
+
+/**
+ * Sets won by each side and whether that settles the match.
+ *
+ * Only sets that have been ended count. A set sitting at 25-20 that nobody has
+ * closed out yet is still in progress, and treating it as won would declare the
+ * match over while the teams are still on the floor.
+ *
+ * @param {object} match
+ * @returns {{us: number, them: number, winner: 'us'|'them'|null, decided: boolean,
+ *            format: object, setsPlayed: number}}
+ */
+export function matchScore(match) {
+    const format = formatFor(match?.format ?? DEFAULT_FORMAT);
+    let us = 0;
+    let them = 0;
+    let setsPlayed = 0;
+
+    for (const set of match?.sets ?? []) {
+        if (!set.complete) continue;
+        setsPlayed += 1;
+        const state = computeSetState(set);
+        if (state.us > state.them) us += 1;
+        else if (state.them > state.us) them += 1;
+    }
+
+    const winner = us >= format.winAt ? 'us' : them >= format.winAt ? 'them' : null;
+    return { us, them, winner, decided: Boolean(winner), format, setsPlayed };
 }

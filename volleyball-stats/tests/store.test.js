@@ -23,23 +23,25 @@ class MemoryStorage {
 /** A store with six players on court and a set already started. */
 function seeded(storage = new MemoryStorage()) {
     const store = new Store(storage);
+    const team = store.addTeam({ id: 'var', name: 'Var', fullName: 'Varsity' });
     const players = ['Jane', 'Tess', 'McKenna', 'Ella', 'Hailey', 'Hannah', 'Bench One'].map((name, index) =>
-        store.addPlayer({ number: String(index + 1), name }),
+        store.addPlayer(team.id, { number: String(index + 1), name }),
     );
-    store.createMatch({ opponent: 'Cornerstone', date: '2026-08-06', venue: 'RRC' });
+    store.createMatch({ teamId: team.id, opponent: 'Cornerstone', date: '2026-08-06', venue: 'RRC' });
     store.startSet({
         startingServer: 'us',
         startingRotation: 1,
         startingLineup: players.slice(0, 6).map((p) => p.id),
     });
-    return { store, players, storage };
+    return { store, players, storage, team };
 }
 
 test('addPlayer keeps the roster sorted by jersey number', () => {
     const store = new Store(new MemoryStorage());
-    store.addPlayer({ number: '16', name: 'McKenna' });
-    store.addPlayer({ number: '2', name: 'Jane' });
-    store.addPlayer({ number: '8', name: 'Ella' });
+    const team = store.addTeam({ id: 'var', name: 'Var' });
+    store.addPlayer(team.id, { number: '16', name: 'McKenna' });
+    store.addPlayer(team.id, { number: '2', name: 'Jane' });
+    store.addPlayer(team.id, { number: '8', name: 'Ella' });
     assert.deepEqual(
         store.roster.map((p) => p.number),
         ['2', '8', '16'],
@@ -48,8 +50,9 @@ test('addPlayer keeps the roster sorted by jersey number', () => {
 
 test('players without a numeric jersey sort to the end', () => {
     const store = new Store(new MemoryStorage());
-    store.addPlayer({ number: '5', name: 'Five' });
-    store.addPlayer({ number: '', name: 'Nameless' });
+    const team = store.addTeam({ id: 'var', name: 'Var' });
+    store.addPlayer(team.id, { number: '5', name: 'Five' });
+    store.addPlayer(team.id, { number: '', name: 'Nameless' });
     assert.deepEqual(
         store.roster.map((p) => p.name),
         ['Five', 'Nameless'],
@@ -163,7 +166,7 @@ test('a partial saved blob is filled in with defaults', () => {
     storage.setItem('volleyball-stats.v1', JSON.stringify({ roster: [{ id: 'x', number: '1' }] }));
     const store = new Store(storage);
     assert.equal(store.roster.length, 1);
-    assert.ok(store.state.team.name);
+    assert.equal(store.teams.length, 1, 'the flat v1 roster becomes one team');
     assert.deepEqual(store.state.matches, []);
 });
 
@@ -213,9 +216,9 @@ test('deleting a set renumbers the remaining sets', () => {
 });
 
 test('removing a player leaves their recorded stats intact', () => {
-    const { store, players } = seeded();
+    const { store, players, team } = seeded();
     store.recordStat(players[0].id, 'kill');
-    store.removePlayer(players[0].id);
+    store.removePlayer(team.id, players[0].id);
 
     assert.equal(store.roster.length, 6);
     assert.equal(store.activeSet.events[0].playerId, players[0].id);

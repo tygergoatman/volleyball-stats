@@ -6,11 +6,12 @@
  * Bump CACHE_NAME whenever a shell file changes so clients pick up the update.
  */
 
-const CACHE_NAME = 'vbstats-v1';
+const CACHE_NAME = 'vbstats-v2';
 
 const SHELL = [
     './',
     './index.html',
+    './roster.json',
     './manifest.webmanifest',
     './css/app.css',
     './js/app.js',
@@ -52,6 +53,24 @@ self.addEventListener('fetch', (event) => {
     // Navigations fall back to the cached shell when offline.
     if (request.mode === 'navigate') {
         event.respondWith(fetch(request).catch(() => caches.match('./index.html', { ignoreSearch: true })));
+        return;
+    }
+
+    // The shared roster is the one file that must not be served stale, or a
+    // roster change published on GitHub would never reach anyone's phone. Go to
+    // the network first and keep the last good copy for offline use.
+    if (new URL(request.url).pathname.endsWith('/roster.json')) {
+        event.respondWith(
+            fetch(request)
+                .then((response) => {
+                    if (response.ok) {
+                        const copy = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+                    }
+                    return response;
+                })
+                .catch(() => caches.match(request, { ignoreSearch: true })),
+        );
         return;
     }
 
