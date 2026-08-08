@@ -221,5 +221,23 @@ direction, side-out timing, undo/delete recalculation, hitting percentage, and p
 - **Set/assist linkage** — set ratings are captured, but a set is not tied to the kill that
   followed it, so there is no assist column.
 - **Opponent stats** — only your own team's players are tracked; the opponent is just a score.
-- **Bumping `CACHE_NAME` in `sw.js`** is manual. Change it whenever you edit a shell file, or
-  installed copies will keep serving the old version.
+- **A device with no connection cannot pick up an update**, by design — it keeps the last copy it
+  saw so it still works in a gym. Open the app once with signal to move it forward.
+
+## Updating a published copy
+
+Publish the new files and reopen the app with a connection. That is the whole procedure.
+
+The service worker is **network-first with a cache fallback**: online it serves what is currently
+published, offline it serves the last copy it saw. That is the opposite of the usual app-shell
+advice, and it is deliberate — cache-first meant a change only appeared on the *second* launch and
+every deploy depended on remembering to bump a version constant by hand, which is exactly the kind
+of step that gets forgotten and then looks like a broken deploy.
+
+The network attempt is raced against a 3.5 second timeout, so a weak gym connection falls back to
+the cache rather than hanging on a blank screen. If a new worker does take over mid-session, the
+page reloads itself once so what is on screen matches what is installed.
+
+`APP_VERSION` in `js/version.js` is shown at the bottom of the Roster tab. It exists purely to
+answer "is this phone running what I just published?" — bump it when you publish so the answer is
+visible, but nothing depends on it.

@@ -1411,6 +1411,24 @@ button:disabled {
     justify-self: end;
 }
 
+/* ---------------------------------------------------------------- version */
+
+.versionrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+}
+
+.versionrow__text {
+    font-size: 11px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
 /* --------------------------------------------------------- final scoreline */
 
 .finalscore {

@@ -1,12 +1,24 @@
 /**
- * Offline support. The app shell is precached so a gym with no signal still
- * loads the app; all match data lives in localStorage and never leaves the
- * device, so there is nothing to sync.
+ * Offline support.
  *
- * Bump CACHE_NAME whenever a shell file changes so clients pick up the update.
+ * The strategy is network-first with a cache fallback, on purpose. Cache-first
+ * is the usual advice for an app shell, but it means a freshly published change
+ * is invisible until the second launch, and it made every deploy depend on
+ * remembering to bump a version constant by hand. Here, if the phone has a
+ * connection it gets the current files; if it does not — the normal case in a
+ * gym — it gets the last copy it saw, which is the whole point of the cache.
+ *
+ * The network attempt is raced against a short timeout so a barely-there
+ * connection falls back to the cache rather than hanging on the splash screen.
+ *
+ * CACHE_NAME no longer needs bumping to ship an update. It exists only to
+ * invalidate everything at once if the cached shape ever needs a clean break.
  */
 
-const CACHE_NAME = 'vbstats-v2';
+const CACHE_NAME = 'vbstats-v3';
+
+/** How long to wait for the network before serving the cached copy. */
+const NETWORK_TIMEOUT_MS = 3500;
 
 const SHELL = [
     './',
@@ -18,6 +30,7 @@ const SHELL = [
     './js/model.js',
     './js/stats.js',
     './js/store.js',
+    './js/version.js',
     './js/ui/dom.js',
     './js/ui/court.js',
     './js/ui/roster.js',
@@ -32,7 +45,13 @@ self.addEventListener('install', (event) => {
     event.waitUntil(
         caches
             .open(CACHE_NAME)
-            .then((cache) => cache.addAll(SHELL))
+            // Individually, so one missing file cannot fail the whole install
+            // and leave the app with no offline copy at all.
+            .then((cache) =>
+                Promise.all(
+                    SHELL.map((path) => cache.add(path).catch((error) => console.warn('Precache skipped', path, error))),
+                ),
+            )
             .then(() => self.skipWaiting()),
     );
 });
@@ -46,45 +65,44 @@ self.addEventListener('activate', (event) => {
     );
 });
 
+/** Let the page ask the worker to step aside immediately. */
+self.addEventListener('message', (event) => {
+    if (event.data === 'skip-waiting') self.skipWaiting();
+});
+
+/**
+ * Fetch from the network, falling back to the cache on failure or if the
+ * network is too slow to be useful. Successful responses refresh the cache.
+ */
+function networkFirst(request, fallbackKey = request) {
+    const fromCache = () => caches.match(fallbackKey, { ignoreSearch: true });
+
+    const network = fetch(request).then((response) => {
+        if (response.ok && new URL(request.url).origin === self.location.origin) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+    });
+
+    const timeout = new Promise((resolve) => {
+        setTimeout(() => resolve(fromCache().then((cached) => cached ?? network)), NETWORK_TIMEOUT_MS);
+    });
+
+    return Promise.race([network, timeout]).catch(() => fromCache());
+}
+
 self.addEventListener('fetch', (event) => {
     const { request } = event;
     if (request.method !== 'GET') return;
 
-    // Navigations fall back to the cached shell when offline.
+    const sameOrigin = new URL(request.url).origin === self.location.origin;
+    if (!sameOrigin) return;
+
     if (request.mode === 'navigate') {
-        event.respondWith(fetch(request).catch(() => caches.match('./index.html', { ignoreSearch: true })));
+        event.respondWith(networkFirst(request, './index.html'));
         return;
     }
 
-    // The shared roster is the one file that must not be served stale, or a
-    // roster change published on GitHub would never reach anyone's phone. Go to
-    // the network first and keep the last good copy for offline use.
-    if (new URL(request.url).pathname.endsWith('/roster.json')) {
-        event.respondWith(
-            fetch(request)
-                .then((response) => {
-                    if (response.ok) {
-                        const copy = response.clone();
-                        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-                    }
-                    return response;
-                })
-                .catch(() => caches.match(request, { ignoreSearch: true })),
-        );
-        return;
-    }
-
-    event.respondWith(
-        caches.match(request, { ignoreSearch: true }).then((cached) => {
-            if (cached) return cached;
-            return fetch(request).then((response) => {
-                // Cache same-origin successes so later visits work offline too.
-                if (response.ok && new URL(request.url).origin === self.location.origin) {
-                    const copy = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-                }
-                return response;
-            });
-        }),
-    );
+    event.respondWith(networkFirst(request));
 });

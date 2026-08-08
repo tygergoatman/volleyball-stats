@@ -8,6 +8,7 @@
  */
 
 import { ROSTER_POSITIONS } from '../model.js';
+import { APP_VERSION } from '../version.js';
 import { el, mount, openSheet, closeSheet, toast, confirmDialog, downloadText } from './dom.js';
 
 /** Which team's players are listed. null means everyone. */
@@ -572,6 +573,39 @@ function dataPanel(store) {
                     store.reset();
                     toast('All data erased', 'warn');
                 }
+            },
+        }),
+        versionRow(store),
+    ]);
+}
+
+/**
+ * Which build this device is running. Publishing an update and then wondering
+ * whether the phone actually picked it up is otherwise unanswerable.
+ */
+function versionRow(store) {
+    return el('div.versionrow', {}, [
+        el('span.versionrow__text', {
+            text: `App version ${APP_VERSION} · roster ${store.state.rosterFile?.updated ?? 'not downloaded'}`,
+        }),
+        el('button.btn.btn--ghost.btn--sm', {
+            type: 'button',
+            text: 'Check for update',
+            onClick: async () => {
+                if (!('serviceWorker' in navigator)) {
+                    location.reload();
+                    return;
+                }
+                toast('Checking…');
+                try {
+                    const registration = await navigator.serviceWorker.getRegistration();
+                    await registration?.update();
+                } catch (error) {
+                    console.warn('Update check failed', error);
+                }
+                // Reload regardless: with a network-first worker this alone
+                // pulls the current files whenever there is a connection.
+                setTimeout(() => location.reload(), 400);
             },
         }),
     ]);

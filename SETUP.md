@@ -113,13 +113,14 @@ score moves the way you expect. Better to find a surprise in your living room.
 To edit a file: open it in your GitHub repository, click the pencil icon, make the change, click
 **Commit changes**. The live site updates in about a minute.
 
-Two things to know if you change anything:
+Once Pages has finished publishing, open the app on your phone **with a connection** and it picks
+the change up on that launch. There is nothing to bump and nothing to reinstall.
 
-- Open the site fresh after an edit; your phone may serve the cached old copy for a while. To
-  force it, uninstall the home-screen icon and re-add it.
-- If you edit `index.html`, any file in `js/` or `css/`, then also open `sw.js` and change
-  `vbstats-v1` to `vbstats-v2` (then `v3` next time). That is the signal that tells already
-  installed copies to pick up the new version.
+To confirm which build a phone is on, look at the bottom of the Roster tab — it shows the app
+version and the date of the roster it has. **Check for update** next to it forces a fresh look.
+
+If a phone seems stuck on an old version, it is almost always because it had no connection when
+you opened it. Open it somewhere with signal and tap **Check for update**.
 
 ## If something goes wrong
 

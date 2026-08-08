@@ -317,10 +317,29 @@ requestWakeLock();
 loadSharedRoster();
 
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch((error) => {
+    // When a new worker takes over, the page in front of the user was built
+    // from the previous one. Reload once so what is on screen matches what is
+    // now installed, instead of asking anyone to close and reopen the app.
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloading) return;
+        reloading = true;
+        location.reload();
+    });
+
+    window.addEventListener('load', async () => {
+        try {
+            const registration = await navigator.serviceWorker.register('./sw.js');
+
+            // Look for a new version on launch and whenever the app comes back
+            // to the foreground, which is when a coach would notice.
+            registration.update().catch(() => {});
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') registration.update().catch(() => {});
+            });
+        } catch (error) {
             console.warn('Offline mode unavailable:', error);
-        });
+        }
     });
 }
 
