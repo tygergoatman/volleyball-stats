@@ -2,12 +2,16 @@
 
 import {
     COURT_GRID,
+    DEFAULT_FORMAT,
     FRONT_ROW,
+    MATCH_FORMATS,
     POSITION_LABELS,
     STAT_GROUPS,
     STAT_BY_CODE,
     TEAM_EVENTS,
+    computeSetState,
     describeEvent,
+    matchScore,
     positionOf,
     setWinner,
 } from '../model.js';
@@ -19,6 +23,7 @@ let pendingSubId = null;
 export function renderCourt(root, store, actions) {
     const match = store.activeMatch;
     if (!match) return mount(root, noMatchPanel(store, actions));
+    if (match.complete) return mount(root, matchCompletePanel(store, match, actions));
 
     const set = store.activeSet;
     if (!set) return mount(root, setupSetPanel(store, actions));
@@ -38,18 +43,21 @@ export function renderCourt(root, store, actions) {
 /* ------------------------------------------------------------- empty states */
 
 function noMatchPanel(store, actions) {
+    // A match needs some team with players tagged to it — not necessarily the
+    // team that happens to be in context right now.
+    const ready = store.teams.some((team) => store.playersForTeam(team.id).length > 0);
+
     return el('div.panel.panel--center', {}, [
         el('h2.panel__title', { text: 'No match in progress' }),
         el('p.panel__hint', {
-            text:
-                store.roster.length === 0
-                    ? 'Add your players on the Roster tab first, then start a match.'
-                    : 'Start a match to begin capturing stats.',
+            text: ready
+                ? 'Start a match to begin capturing stats.'
+                : 'No team has any players tagged to it yet. Set that up on the Roster tab first.',
         }),
         el('button.btn.btn--primary.btn--lg', {
             type: 'button',
             text: 'New Match',
-            disabled: store.roster.length === 0,
+            disabled: !ready,
             onClick: actions.newMatch,
         }),
         store.state.matches.length > 0 &&
@@ -58,6 +66,52 @@ function noMatchPanel(store, actions) {
                 text: 'Open a past match',
                 onClick: actions.pickMatch,
             }),
+    ]);
+}
+
+/** Final scoreboard for a match that has been closed out. */
+function matchCompletePanel(store, match, actions) {
+    const score = matchScore(match);
+    const team = store.activeTeam;
+
+    return el('div.panel.panel--center', {}, [
+        el('h2.panel__title', {
+            text: score.winner === 'us' ? 'Match won' : score.winner === 'them' ? 'Match lost' : 'Match ended',
+        }),
+        el('div.finalscore', {}, [
+            el('span.finalscore__side', { text: team?.name ?? 'Us' }),
+            el('span.finalscore__value', { class: 'is-us', text: String(score.us) }),
+            el('span.finalscore__dash', { text: '–' }),
+            el('span.finalscore__value', { class: 'is-them', text: String(score.them) }),
+            el('span.finalscore__side', { text: match.opponent }),
+        ]),
+        el(
+            'div.setline',
+            {},
+            match.sets.map((set) => {
+                const { us, them } = computeSetState(set);
+                return el('span.setline__score', {
+                    class: us > them ? 'is-won' : them > us ? 'is-lost' : '',
+                    text: `S${set.number} ${us}–${them}`,
+                });
+            }),
+        ),
+        el('p.panel__hint', {
+            text: `${score.format.label} · ${match.date}${match.venue ? ` · ${match.venue}` : ''}`,
+        }),
+        el('button.btn.btn--primary.btn--lg', {
+            type: 'button',
+            text: 'New Match',
+            onClick: actions.newMatch,
+        }),
+        el('button.btn.btn--ghost', {
+            type: 'button',
+            text: 'Reopen this match',
+            onClick: () => {
+                store.reopenMatch(match.id);
+                toast('Match reopened');
+            },
+        }),
     ]);
 }
 
@@ -71,6 +125,7 @@ function setupSetPanel(store, actions) {
     const draft = {
         startingServer: previous ? (previous.startingServer === 'us' ? 'them' : 'us') : 'us',
         startingRotation: 1,
+        format: match.format ?? DEFAULT_FORMAT,
         lineup: [null, null, null, null, null, null],
     };
 
@@ -81,12 +136,44 @@ function setupSetPanel(store, actions) {
     function build() {
         const chosen = new Set(draft.lineup.filter(Boolean));
         const ready = draft.lineup.every(Boolean);
+        const team = store.activeTeam;
+        const short = store.roster.length < 6;
 
         return [
-            el('h2.panel__title', { text: `Set ${match.sets.length + 1} lineup` }),
-            el('p.panel__hint', {
-                text: 'Tap a spot on the court and pick the player who starts there.',
+            el('h2.panel__title', {
+                text: `Set ${match.sets.length + 1} lineup${team ? ` · ${team.name}` : ''}`,
             }),
+            short
+                ? el('p.panel__hint', {
+                      text: `${team?.fullName ?? 'This team'} has only ${store.roster.length} player${
+                          store.roster.length === 1 ? '' : 's'
+                      }. You need six to start a set — add them on the Roster tab, or to roster.json.`,
+                  })
+                : el('p.panel__hint', {
+                      text: 'Tap a spot on the court and pick the player who starts there.',
+                  }),
+
+            // Format decides which set is played to 15, so it is only offered
+            // before the first set — changing it mid-match would move the target
+            // under sets already played.
+            match.sets.length === 0
+                ? el('div.field', {}, [
+                      el('span.field__label', { text: 'Match format' }),
+                      el(
+                          'div.segmented',
+                          {},
+                          MATCH_FORMATS.map((option) =>
+                              toggleButton(option.label, draft.format === option.sets, () => {
+                                  draft.format = option.sets;
+                                  rerender();
+                              }),
+                          ),
+                      ),
+                      el('p.panel__hint', {
+                          text: `Sets to 25, deciding set ${draft.format} to 15.`,
+                      }),
+                  ])
+                : matchProgressHint(store, match, actions),
 
             el('div.field', {}, [
                 el('span.field__label', { text: 'First serve' }),
@@ -159,10 +246,17 @@ function setupSetPanel(store, actions) {
 
             el('button.btn.btn--primary.btn--lg', {
                 type: 'button',
-                text: ready ? 'Start Set' : 'Fill all six spots',
+                text: ready ? `Start Set ${match.sets.length + 1}` : 'Fill all six spots',
                 disabled: !ready,
                 onClick: () => actions.startSet(draft),
             }),
+
+            match.sets.length > 0 &&
+                el('button.btn.btn--ghost', {
+                    type: 'button',
+                    text: 'End Match',
+                    onClick: () => actions.endMatch(),
+                }),
 
             match.sets.length === 0 &&
                 el('button.btn.btn--ghost', {
@@ -175,6 +269,26 @@ function setupSetPanel(store, actions) {
 
     rerender();
     return container;
+}
+
+/** Where the match stands between sets, and whether it is already settled. */
+function matchProgressHint(store, match) {
+    const score = matchScore(match);
+    const nextSet = match.sets.length + 1;
+
+    return el('div.field', {}, [
+        el('span.field__label', { text: 'Match' }),
+        el('p.panel__hint', {
+            class: score.decided ? 'is-decided' : '',
+            text: score.decided
+                ? `${score.format.label} · sets ${score.us}–${score.them} · ${
+                      score.winner === 'us' ? 'you have won the match' : 'the match is lost'
+                  }. End it below, or play on.`
+                : `${score.format.label} · sets ${score.us}–${score.them} · set ${nextSet} is to ${
+                      nextSet >= score.format.sets ? 15 : 25
+                  }.`,
+        }),
+    ]);
 }
 
 function pickPlayerForSlot(store, position, chosen, onPick) {
@@ -225,11 +339,12 @@ function scoreboard(store, live, set) {
 
     return el('section.scoreboard', {}, [
         el('div.score.score--us', { class: live.serving === 'us' ? 'score--serving' : '' }, [
-            el('span.score__label', { text: store.state.team.name }),
+            el('span.score__label', { text: store.activeTeam?.name ?? 'Us' }),
             el('span.score__value', { text: String(live.us) }),
         ]),
         el('div.scoreboard__mid', {}, [
             el('span.scoreboard__set', { text: `Set ${set.number}` }),
+            el('span.scoreboard__target', { text: `to ${set.target ?? 25}` }),
             el('span.scoreboard__rot', { text: `Rot ${live.rotation}` }),
             el('span.scoreboard__serve', {
                 class: live.serving === 'us' ? 'is-us' : 'is-them',

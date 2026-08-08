@@ -14,8 +14,12 @@ import {
 } from '../stats.js';
 import { el, mount, toast, downloadText } from './dom.js';
 
-/** Which slice of the season is on screen, and which stat family. */
-const view = { scope: 'set', category: 'pass' };
+/**
+ * Which slice of the season is on screen, and which stat family. `teamId` only
+ * applies to the season scope — set and match scopes take their team from the
+ * open match.
+ */
+const view = { scope: 'set', category: 'pass', teamId: null };
 
 const CATEGORIES = [
     { key: 'pass', label: 'Pass' },
@@ -68,9 +72,20 @@ const COLUMNS = {
     ],
 };
 
+/**
+ * Whose season is on screen: the team you picked here, or the one in play.
+ * Falls back to the first team so the tab is never blank.
+ */
+function seasonTeam(store) {
+    return (
+        store.team(view.teamId) ?? store.activeTeam ?? store.team(store.state.activeTeamId) ?? store.teams[0] ?? null
+    );
+}
+
 export function renderStats(root, store) {
     const match = store.activeMatch;
     const { lines, sets, scopeLabel } = collect(store);
+    const seasonTeamId = seasonTeam(store)?.id ?? null;
 
     mount(
         root,
@@ -80,6 +95,26 @@ export function renderStats(root, store) {
                 scopeButton(store, 'match', 'Match', !match),
                 scopeButton(store, 'season', 'Season', false),
             ]),
+            // Season totals need a team of their own: you often want to look at
+            // JV's numbers without opening a JV match.
+            view.scope === 'season' &&
+                store.teams.length > 1 &&
+                el(
+                    'div.segmented.segmented--wrap',
+                    {},
+                    store.teams.map((team) =>
+                        el('button.seg', {
+                            type: 'button',
+                            class: team.id === seasonTeamId ? 'seg--on' : '',
+                            text: team.name,
+                            title: team.fullName,
+                            onClick: () => {
+                                view.teamId = team.id;
+                                store.commit();
+                            },
+                        }),
+                    ),
+                ),
             el('p.panel__hint', { text: scopeLabel }),
         ]),
 
@@ -111,7 +146,13 @@ export function renderStats(root, store) {
                 disabled: lines.size === 0,
                 onClick: () => {
                     const stamp = new Date().toISOString().slice(0, 10);
-                    downloadText(`stats-${view.scope}-${stamp}.csv`, toCsv(store.roster, lines), 'text/csv');
+                    const scoped = view.scope === 'season' ? seasonTeam(store) : store.activeTeam;
+                    const team = scoped?.name?.toLowerCase().replace(/\W+/g, '-') ?? 'team';
+                    downloadText(
+                        `stats-${team}-${view.scope}-${stamp}.csv`,
+                        toCsv(playersWithData(store, lines), lines),
+                        'text/csv',
+                    );
                     toast('CSV downloaded');
                 },
             }),
@@ -141,13 +182,17 @@ function collect(store) {
             }`,
         };
     }
-    const allSets = store.state.matches.flatMap((m) => m.sets);
+    // Season totals stay within one team — a JV kill does not belong in a
+    // Varsity line. A player who swings between teams keeps separate totals for
+    // each, because each is filtered by the matches that team played.
+    const team = seasonTeam(store);
+    const teamMatches = team ? store.matchesFor(team.id) : store.state.matches;
     return {
-        lines: aggregateSeason(store.state.matches),
-        sets: allSets,
-        scopeLabel: `${store.state.season.name} · ${store.state.matches.length} match${
-            store.state.matches.length === 1 ? '' : 'es'
-        }`,
+        lines: aggregateSeason(teamMatches),
+        sets: teamMatches.flatMap((m) => m.sets),
+        scopeLabel: `${team ? `${team.fullName} · ` : ''}${store.state.season.name} · ${
+            teamMatches.length
+        } match${teamMatches.length === 1 ? '' : 'es'}`,
     };
 }
 
@@ -166,9 +211,26 @@ function scopeButton(store, scope, label, disabled) {
 
 /* ------------------------------------------------------------------ table */
 
+/**
+ * The current roster, plus anyone with recorded stats who has since left it —
+ * so a mid-season roster change never silently drops a player's numbers.
+ */
+function playersWithData(store, lines) {
+    // In the season scope the team on screen may not be the one in play, so the
+    // roster has to follow the scope rather than the open match.
+    const scoped = view.scope === 'season' ? seasonTeam(store) : null;
+    const roster = scoped ? store.playersForTeam(scoped.id) : store.roster;
+    const onRoster = new Set(roster.map((p) => p.id));
+    const departed = [...lines.keys()]
+        .filter((id) => !onRoster.has(id))
+        .map((id) => store.player(id))
+        .filter(Boolean);
+    return [...roster, ...departed];
+}
+
 function statTable(store, lines) {
     const columns = COLUMNS[view.category];
-    const rows = store.roster
+    const rows = playersWithData(store, lines)
         .map((player) => {
             const line = lines.get(player.id) ?? emptyLine();
             return { player, line, derived: derive(line) };

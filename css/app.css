@@ -236,6 +236,13 @@ button:disabled {
     font-size: 13px;
 }
 
+.scoreboard__target {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
 .scoreboard__rot {
     background: var(--surface-3);
     border-radius: 999px;
@@ -983,6 +990,11 @@ button:disabled {
     transform: scale(0.95);
 }
 
+/* The pass row carries six buttons, so its labels get a touch less type. */
+.statgroup--pass .statbtn {
+    font-size: 17px;
+}
+
 .statbtn--good {
     background: color-mix(in srgb, var(--good) 82%, #000);
     border-color: var(--good);
@@ -1043,6 +1055,80 @@ button:disabled {
     padding: 3px 8px;
 }
 
+/* ------------------------------------------------------------------ teams */
+
+.teamlist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.teamlist__item {
+    border-radius: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.teamlist__item.is-open {
+    border-color: color-mix(in srgb, var(--us) 55%, var(--border));
+}
+
+.teamrow {
+    display: flex;
+    align-items: stretch;
+}
+
+.teamrow__main {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    gap: 2px 8px;
+    padding: 10px 4px 10px 10px;
+    text-align: left;
+}
+
+.teamrow__name {
+    font-weight: 800;
+    font-size: 16px;
+    color: var(--us);
+}
+
+.teamrow__full {
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Sits on its own line under the name and full name. */
+.teamrow__meta {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.teamrow__edit {
+    width: 44px;
+    flex: none;
+    font-size: 18px;
+    color: var(--muted);
+    border-left: 1px solid var(--border);
+}
+
+.teamlist__body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 10px 10px;
+    border-top: 1px solid var(--border);
+}
+
 /* ----------------------------------------------------------------- roster */
 
 .rosterlist {
@@ -1099,6 +1185,17 @@ button:disabled {
 .tag--libero {
     background: color-mix(in srgb, var(--warn) 30%, var(--surface-3));
     color: #fde68a;
+}
+
+/* Team tags on a player row — two of these means a swing player. */
+.tag--team {
+    background: color-mix(in srgb, var(--us) 26%, var(--surface-3));
+    color: #cfe3ff;
+}
+
+.tag--warn {
+    background: color-mix(in srgb, var(--bad) 26%, var(--surface-3));
+    color: #fca5a5;
 }
 
 /* ------------------------------------------------------------ stat tables */
@@ -1255,7 +1352,7 @@ button:disabled {
 
 .log__row {
     display: grid;
-    grid-template-columns: 54px 1fr 30px 34px;
+    grid-template-columns: 54px 1fr auto 30px;
     align-items: center;
     gap: 8px;
     padding: 8px;
@@ -1263,6 +1360,14 @@ button:disabled {
     background: var(--surface-2);
     border-left: 3px solid transparent;
     font-size: 13px;
+}
+
+.log__edited {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--warn);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .log__row--us {
@@ -1280,10 +1385,14 @@ button:disabled {
     font-size: 12px;
 }
 
+/* A button so the whole line is a tap target for correcting the entry. */
 .log__text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-align: left;
+    min-height: 32px;
+    font-size: 13px;
 }
 
 .log__rot {
@@ -1300,6 +1409,67 @@ button:disabled {
     color: var(--muted);
     font-size: 12px;
     justify-self: end;
+}
+
+/* --------------------------------------------------------- final scoreline */
+
+.finalscore {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.finalscore__side {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    max-width: 9ch;
+    /* Long opponent names wrap rather than being cut off mid-word. */
+    overflow-wrap: break-word;
+    text-align: center;
+}
+
+.finalscore__value {
+    font-size: 44px;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.finalscore__value.is-us {
+    color: var(--us);
+}
+
+.finalscore__value.is-them {
+    color: var(--them);
+}
+
+.finalscore__dash {
+    font-size: 28px;
+    color: var(--muted);
+}
+
+.panel__hint.is-decided {
+    color: var(--warn);
+    font-weight: 700;
+}
+
+/* ------------------------------------------------------------- chip grid */
+
+.chipgrid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Marks the option an entry currently holds while it is being corrected. */
+.statbtn--on {
+    outline: 3px solid var(--text);
+    outline-offset: -3px;
 }
 
 /* ---------------------------------------------------------------- confirm */

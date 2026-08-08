@@ -1,6 +1,7 @@
 /** Application shell: tab routing, match lifecycle actions, and bootstrap. */
 
 import { Store, todayIso } from './store.js';
+import { matchScore } from './model.js';
 import { renderCourt, resetCourtInteraction } from './ui/court.js';
 import { renderRoster } from './ui/roster.js';
 import { renderStats } from './ui/statsview.js';
@@ -22,8 +23,40 @@ let activeTab = 'court';
 
 const actions = {
     newMatch() {
-        const draft = { opponent: '', date: todayIso(), venue: '' };
+        const draft = {
+            teamId: store.state.activeTeamId ?? store.teams[0]?.id ?? null,
+            opponent: '',
+            date: todayIso(),
+            venue: '',
+        };
+
+        // Which team is playing decides which roster the whole match uses, so
+        // it is asked first and cannot be changed once sets have been captured.
+        const teamRow = el(
+            'div.segmented.segmented--wrap',
+            {},
+            store.teams.map((team) =>
+                el('button.seg', {
+                    type: 'button',
+                    class: draft.teamId === team.id ? 'seg--on' : '',
+                    text: team.name,
+                    title: team.fullName,
+                    onClick: (event) => {
+                        draft.teamId = team.id;
+                        for (const sibling of teamRow.children) sibling.classList.remove('seg--on');
+                        event.currentTarget.classList.add('seg--on');
+                    },
+                }),
+            ),
+        );
+
         const body = el('div.form', {}, [
+            el('div.field', {}, [
+                el('span.field__label', { text: 'Team' }),
+                store.teams.length
+                    ? teamRow
+                    : el('p.panel__hint', { text: 'No teams yet — add one on the Roster tab.' }),
+            ]),
             el('label.field', {}, [
                 el('span.field__label', { text: 'Opponent' }),
                 el('input.input', {
@@ -61,6 +94,10 @@ const actions = {
                     type: 'button',
                     text: 'Create Match',
                     onClick: () => {
+                        if (!draft.teamId) {
+                            toast('Pick a team first', 'warn');
+                            return;
+                        }
                         store.createMatch(draft);
                         closeSheet();
                         activeTab = 'court';
@@ -88,6 +125,9 @@ const actions = {
                         },
                     },
                     [
+                        el('span.picker__num.picker__num--team', {
+                            text: store.team(match.teamId)?.name ?? '—',
+                        }),
                         el('span.picker__name', { text: `vs ${match.opponent}` }),
                         el('span.picker__pos', { text: match.date }),
                         el('span.picker__flag', {
@@ -113,15 +153,44 @@ const actions = {
             startingServer: draft.startingServer,
             startingRotation: draft.startingRotation,
             startingLineup: draft.lineup,
+            format: draft.format,
         });
         resetCourtInteraction();
         toast('Set started — good luck');
     },
 
-    endSet(setId) {
+    async endSet(setId) {
         store.markSetComplete(setId, true);
         store.setActiveSet(null);
         resetCourtInteraction();
+
+        // Closing that set may have settled the match; offer to finish here
+        // rather than leaving the coach on a "start set 4 of 3" screen.
+        const match = store.activeMatch;
+        const score = matchScore(match);
+        if (!score.decided) return;
+
+        const confirmed = await confirmDialog({
+            title: score.winner === 'us' ? 'Match won' : 'Match lost',
+            message: `Sets ${score.us}–${score.them} in a ${score.format.label.toLowerCase()}. End the match now?`,
+            confirmLabel: 'End Match',
+        });
+        if (confirmed) store.endMatch(match.id);
+    },
+
+    async endMatch() {
+        const match = store.activeMatch;
+        if (!match) return;
+        const score = matchScore(match);
+        const confirmed = await confirmDialog({
+            title: 'End this match?',
+            message: `Final sets ${score.us}–${score.them}. Stats are kept, and you can reopen the match afterwards if you need to.`,
+            confirmLabel: 'End Match',
+        });
+        if (confirmed) {
+            store.endMatch(match.id);
+            toast('Match ended');
+        }
     },
 
     async cancelMatch() {
@@ -152,10 +221,11 @@ function render() {
 
 function renderHeader() {
     const match = store.activeMatch;
+    const team = store.activeTeam;
     mount(
         $('#header'),
         el('div.header__line', {}, [
-            el('span.header__team', { text: store.state.team.name }),
+            el('span.header__team', { text: team?.name ?? 'Volleyball Stats' }),
             match && el('span.header__vs', { text: 'vs' }),
             match && el('span.header__opp', { text: match.opponent }),
             !match && el('span.header__opp', { text: store.state.season.name }),
@@ -217,10 +287,34 @@ document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && !wakeLock) requestWakeLock();
 });
 
+/* ----------------------------------------------------------- shared roster */
+
+/**
+ * Pull the program's shared rosters from the file published alongside the app.
+ *
+ * This is what keeps every coach's device on the same player list: edit
+ * roster.json once on GitHub and each app picks it up the next time it loads
+ * with a connection. A failure here is not fatal — the last-known rosters are
+ * already in local storage, which is exactly what matters in a gym with no
+ * signal.
+ */
+async function loadSharedRoster() {
+    try {
+        // Bypass the cache so an updated file is seen on the next load rather
+        // than whenever the service worker happens to refresh.
+        const response = await fetch('./roster.json', { cache: 'no-cache' });
+        if (!response.ok) throw new Error(`roster.json responded ${response.status}`);
+        store.applyRosterFile(await response.json());
+    } catch (error) {
+        console.warn('Using the rosters already on this device.', error);
+    }
+}
+
 /* ------------------------------------------------------------------ boot */
 
 render();
 requestWakeLock();
+loadSharedRoster();
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

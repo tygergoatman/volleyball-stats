@@ -1,0 +1,55 @@
+{
+    "_readme": "One roster for the whole program. Each player lists the teams they play for, so someone who swings between JV and Varsity is a single entry with both tags. Edit this file on GitHub and every coach's app picks up the change the next time it loads with a connection. Read ROSTER.md before editing — the rule that matters is that a player's id must be unique and must never change or be reused.",
+    "version": 2,
+    "updated": "2026-08-06",
+
+    "teams": [
+        { "id": "ms", "name": "MS", "fullName": "Middle School" },
+        { "id": "jv", "name": "JV", "fullName": "Junior Varsity" },
+        { "id": "var", "name": "Var", "fullName": "Varsity" }
+    ],
+
+    "players": [
+        { "id": "p-001", "number": "1", "name": "Player One", "position": "OH", "teams": ["ms"] },
+        { "id": "p-002", "number": "2", "name": "Player Two", "position": "S", "isSetter": true, "teams": ["ms"] },
+        { "id": "p-003", "number": "3", "name": "Player Three", "position": "MB", "teams": ["ms"] },
+        { "id": "p-004", "number": "4", "name": "Player Four", "position": "OH", "teams": ["ms"] },
+        { "id": "p-005", "number": "5", "name": "Player Five", "position": "MB", "teams": ["ms"] },
+        { "id": "p-006", "number": "6", "name": "Player Six", "position": "OPP", "teams": ["ms"] },
+        { "id": "p-007", "number": "7", "name": "Player Seven", "position": "DS", "teams": ["ms"] },
+        { "id": "p-008", "number": "8", "name": "Player Eight", "position": "L", "isLibero": true, "teams": ["ms"] },
+
+        { "id": "p-101", "number": "1", "name": "Player Nine", "position": "OH", "teams": ["jv"] },
+        { "id": "p-102", "number": "2", "name": "Player Ten", "position": "S", "isSetter": true, "teams": ["jv"] },
+        { "id": "p-103", "number": "3", "name": "Player Eleven", "position": "MB", "teams": ["jv"] },
+        { "id": "p-104", "number": "4", "name": "Player Twelve", "position": "OH", "teams": ["jv"] },
+        { "id": "p-105", "number": "5", "name": "Player Thirteen", "position": "MB", "teams": ["jv"] },
+        { "id": "p-106", "number": "6", "name": "Player Fourteen", "position": "OPP", "teams": ["jv"] },
+        { "id": "p-107", "number": "7", "name": "Player Fifteen", "position": "DS", "teams": ["jv"] },
+
+        {
+            "_note": "A swing player: one entry, tagged for both JV and Varsity. Their stats stay separate per team because season totals are filtered by the matches each team played.",
+            "id": "p-108",
+            "number": "8",
+            "name": "Player Sixteen",
+            "position": "L",
+            "isLibero": true,
+            "teams": ["jv", "var"]
+        },
+
+        { "id": "p-201", "number": "11", "name": "Player Seventeen", "position": "OH", "teams": ["var"] },
+        {
+            "id": "p-202",
+            "number": "12",
+            "name": "Player Eighteen",
+            "position": "S",
+            "isSetter": true,
+            "teams": ["var"]
+        },
+        { "id": "p-203", "number": "13", "name": "Player Nineteen", "position": "MB", "teams": ["var"] },
+        { "id": "p-204", "number": "14", "name": "Player Twenty", "position": "OH", "teams": ["var"] },
+        { "id": "p-205", "number": "15", "name": "Player Twentyone", "position": "MB", "teams": ["var"] },
+        { "id": "p-206", "number": "16", "name": "Player Twentytwo", "position": "OPP", "teams": ["var"] },
+        { "id": "p-207", "number": "17", "name": "Player Twentythree", "position": "DS", "teams": ["var"] }
+    ]
+}

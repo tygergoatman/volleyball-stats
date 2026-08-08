@@ -28,12 +28,68 @@ It then launches full-screen with no browser chrome, keeps the screen awake whil
 capturing, and buzzes on each stat tap. Everything works with no signal after the first load,
 which matters in gyms.
 
+## Teams and the roster
+
+There is **one roster for the whole program**. Teams — MS, JV and Varsity out of the box — are
+tags a player carries. Somebody who swings between JV and Varsity is a single entry with two tags,
+not two records, and their row shows both.
+
+When you create a match you pick the team, and the match draws its pool from everyone carrying
+that tag. The Stats tab scopes season totals per team, so a swing player's JV and Varsity numbers
+stay separate — each is filtered by the matches that team actually played.
+
+The roster comes from [`roster.json`](./roster.json), published alongside the app. That file is the
+shared source of truth: edit it once on GitHub and every coach's phone picks it up the next time
+it loads with a connection. See [ROSTER.md](./ROSTER.md) for how to edit it — the rule that
+matters is that a player's `id` must never change or be reused.
+
+Players can also be added on a single device from the Roster tab. They are marked **added on this
+device** and survive roster-file refreshes, but nobody else sees them.
+
+### Managing them
+
+The Roster tab lists the teams, then the whole roster with a filter row: **All**, one button per
+team, and **No team** if anyone is untagged. Filtering answers "who is on JV?" without duplicating
+anybody.
+
+Tapping a player opens their record, including a multi-select of teams. Ticking Varsity on a JV
+player makes them available to both. Untagging is how you take someone off a team — they stay on
+the program roster, and their recorded stats are untouched. **Delete player** is the separate,
+heavier action that removes them from the program entirely.
+
+The **⋯** button on a team opens rename and removal. Removing a team removes a label and nothing
+else:
+
+- Every player stays on the roster, minus that one tag. Anyone left with no tags shows a **no
+  team** badge and simply cannot be picked for a lineup until they are tagged again.
+- Every match that team played is **kept**, with its stats. The team is archived so those matches
+  can still show whose they were.
+- A team from `roster.json` is hidden on this device and the id remembered — the file is shared and
+  cannot be edited from a phone, so without that the next online load would just put it back. A
+  **Removed** row offers to restore it, which brings the team and its tags back. To remove a team
+  for everyone, delete it from `roster.json`.
+
+Renaming a team from roster.json applies to this device only, the same way player edits do.
+
 ## Data
 
-All data lives in `localStorage` on the device. Nothing is uploaded anywhere, and there is no
-account or server. That also means **clearing your browser data deletes your season**, so use
-Roster → Data → _Export backup_ periodically. The exported JSON restores through _Import backup_
-on any device.
+Match data lives in `localStorage` on the device and is **never uploaded** — only the roster is
+shared, and only in one direction. Two coaches running the app have two independent sets of
+matches.
+
+That also means **clearing your browser data deletes your season**, so use Roster → Data →
+_Export backup_ periodically.
+
+To combine devices after a game, use **Merge a file**: it adds the other coach's matches to yours
+and leaves your own alone, skipping anything already present. _Replace everything from a file_ is
+the destructive option, for restoring a backup onto a clean device.
+
+The workflow this is built around:
+
+1. One person maintains `roster.json`; everyone else just opens the app online once
+2. One scorer per match — two people half-scoring the same game produces two incomplete records
+3. After the game, that scorer exports and sends the file on
+4. Whoever keeps season totals merges it in
 
 Per-set, per-match and season stats can also be exported as CSV from the Stats tab.
 
@@ -68,16 +124,52 @@ would drift, since not every point involves an action by one of your players.
 Your team rotates automatically on a side-out (winning a rally while the opponent was serving).
 The rotation counter runs 1 → 6 and wraps, starting from whichever rotation you pick at set setup.
 
+### Match format
+
+Pick **Best of 3** or **Best of 5** on the first set's lineup screen. It is only offered there,
+because changing it later would move the target under sets already played.
+
+Every set is played to 25 except the deciding one — set 3 of 3, or set 5 of 5 — which is played
+to 15. The scoreboard shows the target so you can tell at a glance which kind of set you are in.
+
+Between sets the screen shows where the match stands. When a team reaches two sets (or three in a
+best of 5) you are asked whether to end the match; you can also end it early from the between-sets
+screen, for a time cap or a forfeit. Only sets you have actually ended count toward the match
+score — a set sitting at 25–20 that nobody has closed out is still in progress.
+
+An ended match shows a final scoreline and stops asking for more sets. **Reopen this match** undoes
+that if play continues.
+
+### Fixing a mistake afterwards
+
+`Undo` on the court removes the last entry. For anything older, go to the **Log** tab and tap the
+entry: you can re-credit it to a different player, change the stat, or delete it. This is the case
+where you tapped the wrong name and play carried on, so you fix it at the next stoppage.
+
+Corrections are safe because the score is replayed rather than stored — change an entry and every
+point, side-out and rotation after it is recalculated. Edited entries are marked so you can spot
+them later. Substitutions cannot be edited in place; delete and re-record them from the court.
+
+Whole sets can be deleted from the Log tab, which also renumbers what is left and re-targets the
+new deciding set.
+
 ### Stats captured
 
-| Group  | Options         | Notes                                                                                    |
-| ------ | --------------- | ---------------------------------------------------------------------------------------- |
-| Pass   | 3, 2, 1, .5, 0  | Averaged per player. `.5` is an overpass to their side (rally continues); `0` is a shank |
-| Attack | K, A, 0         | K = kill, A = attack stays in play, 0 = attack error                                     |
-| Set    | 3, 2, 1, 0      | Averaged; `0` is a setting error                                                         |
-| Serve  | Ace, In, Err    |                                                                                          |
-| Block  | Solo, Asst, Err |                                                                                          |
-| Dig    | Dig, Err        |                                                                                          |
+Rows appear in this order, top to bottom, so the most frequent taps sit highest:
+
+| Group  | Options           | Notes                                                                                    |
+| ------ | ----------------- | ---------------------------------------------------------------------------------------- |
+| Pass   | 3, 2, 1, .5, D, 0 | Averaged per player. `.5` is an overpass to their side (rally continues); `0` is a shank |
+| Set    | 3, 2, 1, 0        | Averaged; `0` is a setting error                                                         |
+| Attack | K, A, 0           | K = kill, A = attack stays in play, 0 = attack error                                     |
+| Block  | Solo, Asst, Err   |                                                                                          |
+| Serve  | Ace, In, Err      |                                                                                          |
+
+Every row ends on its one point-conceding button, so all the red sits down the right-hand edge —
+a test enforces that, since it is the property that makes the sheet readable at a glance.
+
+`D` records a dig. It sits in the pass row because it is the same first-contact decision, but it
+counts as a dig and is deliberately kept out of the passing average.
 
 Hitting percentage is the standard `(K − 0) / attempts` — kills minus attack errors over total
 attempts — so it can be negative.
@@ -92,8 +184,9 @@ player takes that court position and rotates from there. Tap the chip again to c
 ```
 volleyball-stats/
 ├── index.html              shell: header, view, tab bar
+├── roster.json             shared rosters for every team — see ROSTER.md
 ├── manifest.webmanifest    PWA metadata
-├── sw.js                   offline precache
+├── sw.js                   offline precache (roster.json is network-first)
 ├── css/app.css
 ├── js/
 │   ├── model.js            stat definitions, rotation maths, set replay  (pure)
