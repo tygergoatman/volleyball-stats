@@ -7,9 +7,9 @@
  * spot swing players at a glance.
  */
 
-import { ROSTER_POSITIONS } from '../model.js';
+import { ROSTER_POSITIONS, isLibero, isSetter } from '../model.js';
 import { APP_VERSION } from '../version.js';
-import { el, mount, openSheet, closeSheet, toast, confirmDialog, downloadText } from './dom.js';
+import { el, mount, openSheet, closeSheet, toast, confirmDialog, downloadText, shareFile } from './dom.js';
 
 /** Which team's players are listed. null means everyone. */
 let filterTeamId = null;
@@ -170,15 +170,15 @@ function playersPanel(store) {
                               [
                                   el('span.rosterlist__num', { text: `#${player.number}` }),
                                   el('span.rosterlist__name', { text: player.name }),
-                                  player.position && el('span.tag', { text: player.position }),
-                                  // Role badges only add information when the
-                                  // position does not already say the same thing.
-                                  player.isSetter &&
-                                      player.position !== 'S' &&
-                                      el('span.tag.tag--setter', { text: 'S' }),
-                                  player.isLibero &&
-                                      player.position !== 'L' &&
-                                      el('span.tag.tag--libero', { text: 'L' }),
+                                  player.position &&
+                                      el('span.tag', {
+                                          class: isSetter(player)
+                                              ? 'tag--setter'
+                                              : isLibero(player)
+                                                ? 'tag--libero'
+                                                : '',
+                                          text: player.position,
+                                      }),
                                   ...player.teams.map((id) =>
                                       el('span.tag.tag--team', { text: store.team(id)?.name ?? id }),
                                   ),
@@ -317,8 +317,6 @@ function openPlayerSheet(store, player) {
         number: player?.number ?? '',
         name: player?.name ?? '',
         position: player?.position ?? '',
-        isSetter: player?.isSetter ?? false,
-        isLibero: player?.isLibero ?? false,
         // A new player added while a team filter is on joins that team.
         teams: player ? player.teams.slice() : filterTeamId && filterTeamId !== UNTAGGED ? [filterTeamId] : [],
     };
@@ -379,13 +377,6 @@ function openPlayerSheet(store, player) {
         ),
     );
 
-    const setterToggle = checkbox('Setter', draft.isSetter, (checked) => {
-        draft.isSetter = checked;
-    });
-    const liberoToggle = checkbox('Libero', draft.isLibero, (checked) => {
-        draft.isLibero = checked;
-    });
-
     const body = el('div.form', {}, [
         el('div.form__row', {}, [
             el('label.field.field--num', {}, [el('span.field__label', { text: 'Number' }), numberInput]),
@@ -396,8 +387,13 @@ function openPlayerSheet(store, player) {
             store.teams.length === 0 ? el('p.panel__hint', { text: 'No teams to assign yet.' }) : teamRow,
             el('p.panel__hint', { text: 'Pick as many as they play for. Untagged players cannot be put in a lineup.' }),
         ]),
-        el('div.field', {}, [el('span.field__label', { text: 'Position' }), positionRow]),
-        el('div.form__row', {}, [setterToggle, liberoToggle]),
+        el('div.field', {}, [
+            el('span.field__label', { text: 'Position' }),
+            positionRow,
+            el('p.panel__hint', {
+                text: 'S and L are the setter and libero — picking them here is what marks the player on the court map.',
+            }),
+        ]),
         el('div.form__actions', {}, [
             !isNew &&
                 el('button.btn.btn--danger.btn--sm', {
@@ -445,15 +441,6 @@ function openPlayerSheet(store, player) {
         body,
     });
     setTimeout(() => (isNew ? numberInput : nameInput).focus(), 120);
-}
-
-function checkbox(label, checked, onChange) {
-    const input = el('input', {
-        type: 'checkbox',
-        checked: checked || null,
-        onChange: (event) => onChange(event.target.checked),
-    });
-    return el('label.check', {}, [input, el('span', { text: label })]);
 }
 
 /* ----------------------------------------------------------------- season */
@@ -546,15 +533,27 @@ function dataPanel(store) {
         el('div.form__row', {}, [
             el('button.btn.btn--ghost', {
                 type: 'button',
-                text: 'Export backup',
-                onClick: () => {
+                text: 'Share backup',
+                onClick: async () => {
                     const stamp = new Date().toISOString().slice(0, 10);
-                    downloadText(`volleyball-stats-${stamp}.json`, store.exportJson(), 'application/json');
-                    toast('Backup downloaded');
+                    const result = await shareFile(`volleyball-stats-${stamp}.json`, store.exportJson(), {
+                        title: `${store.state.season.name} — full backup`,
+                    });
+                    if (result === 'shared') toast('Shared');
+                    else if (result === 'downloaded') toast('Downloaded — sharing is not available here');
                 },
             }),
             fileButton('Merge a file', 'merge', store),
         ]),
+        el('button.btn.btn--ghost.btn--sm', {
+            type: 'button',
+            text: 'Save backup to this device',
+            onClick: () => {
+                const stamp = new Date().toISOString().slice(0, 10);
+                downloadText(`volleyball-stats-${stamp}.json`, store.exportJson(), 'application/json');
+                toast('Backup downloaded');
+            },
+        }),
         el('p.panel__hint', {
             text: 'Merge adds another coach’s matches to yours and leaves your own untouched — that is how you combine devices after a game. Replace wipes this device and restores the file exactly.',
         }),

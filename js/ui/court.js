@@ -4,6 +4,7 @@ import {
     COURT_GRID,
     DEFAULT_FORMAT,
     FRONT_ROW,
+    HIGHLIGHTED_POSITIONS,
     MATCH_FORMATS,
     POSITION_LABELS,
     STAT_GROUPS,
@@ -99,11 +100,8 @@ function matchCompletePanel(store, match, actions) {
         el('p.panel__hint', {
             text: `${score.format.label} · ${match.date}${match.venue ? ` · ${match.venue}` : ''}`,
         }),
-        el('button.btn.btn--primary.btn--lg', {
-            type: 'button',
-            text: 'New Match',
-            onClick: actions.newMatch,
-        }),
+        // Only actions that belong to *this* match live here. Starting a
+        // different one is not one of them — that is what the ☰ menu is for.
         el('button.btn.btn--ghost', {
             type: 'button',
             text: 'Reopen this match',
@@ -112,6 +110,7 @@ function matchCompletePanel(store, match, actions) {
                 toast('Match reopened');
             },
         }),
+        el('p.panel__hint', { text: 'Use ☰ at the top to start another match or open a past one.' }),
     ]);
 }
 
@@ -416,7 +415,10 @@ function bubble(store, live, position) {
             isServer && el('span.bubble__serve', { text: '🏐', title: 'Serving' }),
             el('span.bubble__num', { text: player ? `#${player.number}` : '—' }),
             el('span.bubble__name', { text: player ? player.name : 'empty' }),
-            player?.isSetter && el('span.bubble__tag', { text: 'S' }),
+            // Setter and libero are the two worth seeing mid-rally.
+            player &&
+                HIGHLIGHTED_POSITIONS.includes(player.position) &&
+                el('span.bubble__tag', { text: player.position }),
         ],
     );
 }

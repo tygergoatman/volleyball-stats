@@ -65,8 +65,9 @@ Add an object to `players`. Only `id`, `number`, `name` and `teams` matter:
 Watch the commas — every entry needs one after it **except the last in the list**.
 A stray comma is the most common way to break the file.
 
-`position` accepts `OH`, `MB`, `S`, `OPP`, `L` or `DS`. You can also set
-`"isSetter": true` (marks the player on the court map) and `"isLibero": true`.
+`position` accepts `OH`, `MB`, `S`, `OPP`, `L` or `DS`. Choosing `S` or `L` is what
+marks the setter and the libero on the court map — there is no separate flag for
+either, so the roster cannot contradict itself.
 
 ## Moving a player between teams
 
@@ -84,6 +85,11 @@ Playing both:
 
 Stats already recorded stay where they were — a kill in a JV match stays in the
 JV column no matter what tags the player carries afterwards.
+
+If your file still has `"isSetter": true` or `"isLibero": true` from an earlier
+version, it keeps working — the app reads them as position `S` and `L` when no
+position is given. You can delete them; `position` is the only place this is
+recorded now.
 
 ## Removing a player
 

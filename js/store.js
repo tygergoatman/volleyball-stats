@@ -43,15 +43,24 @@ function uniq(values) {
     return [...new Set(values.filter(Boolean))];
 }
 
-/** Normalise one player record from any source. */
+/**
+ * Normalise one player record from any source.
+ *
+ * Setter and libero used to be separate booleans alongside `position`, which
+ * meant the roster could say a player was an outside hitter and the libero at
+ * the same time. They are folded into `position` here, so older saved data and
+ * older roster.json files still land in the right place.
+ */
 function normalisePlayer(raw, { local = false, teams = [] } = {}) {
+    let position = raw.position ?? '';
+    if (!position && raw.isSetter) position = 'S';
+    if (!position && raw.isLibero) position = 'L';
+
     return {
         id: String(raw.id ?? newId('p')),
         number: String(raw.number ?? '').trim(),
         name: String(raw.name ?? '').trim(),
-        position: raw.position ?? '',
-        isSetter: Boolean(raw.isSetter),
-        isLibero: Boolean(raw.isLibero),
+        position,
         teams: uniq([...(raw.teams ?? []), ...teams].map(String)),
         local,
     };
@@ -495,12 +504,9 @@ export class Store {
 
     /* --------------------------------------------------------------- players */
 
-    addPlayer({ number, name, position = '', isSetter = false, isLibero = false, teams = [] }) {
+    addPlayer({ number, name, position = '', teams = [] }) {
         return this.update((state) => {
-            const player = normalisePlayer(
-                { id: newId('p'), number, name, position, isSetter, isLibero, teams },
-                { local: true },
-            );
+            const player = normalisePlayer({ id: newId('p'), number, name, position, teams }, { local: true });
             state.players.push(player);
             state.players.sort(sortByNumber);
             return player;
@@ -631,7 +637,7 @@ export class Store {
      * Start a new set in the active match.
      *
      * @param {{startingServer: 'us'|'them', startingRotation: number,
-     *          startingLineup: Array<string|null>, liberoId?: string|null}} config
+     *          startingLineup: Array<string|null>, format?: number}} config
      */
     startSet(config) {
         return this.update((state) => {
@@ -645,7 +651,6 @@ export class Store {
                 startingServer: config.startingServer ?? 'us',
                 startingRotation: config.startingRotation ?? 1,
                 startingLineup: (config.startingLineup ?? []).slice(0, 6),
-                liberoId: config.liberoId ?? null,
                 // The deciding set is played to 15, so the target follows the format.
                 target: config.target ?? targetForSet(number, match.format ?? DEFAULT_FORMAT),
                 events: [],
@@ -759,6 +764,61 @@ export class Store {
 
     exportJson() {
         return JSON.stringify(this.state, null, 2);
+    }
+
+    /**
+     * A backup containing one match and only what is needed to read it.
+     *
+     * This is what a coach sends after their game: small enough to message, and
+     * it merges into the season keeper's device exactly like a full backup,
+     * because it is one — just a narrower slice.
+     *
+     * @param {string} matchId
+     * @returns {string|null}
+     */
+    exportMatchJson(matchId) {
+        const match = this.state.matches.find((m) => m.id === matchId);
+        if (!match) return null;
+
+        // Everyone the match refers to, whether or not they are still rostered.
+        const involved = new Set();
+        for (const set of match.sets ?? []) {
+            for (const id of set.startingLineup ?? []) if (id) involved.add(id);
+            for (const event of set.events ?? []) {
+                for (const id of [event.playerId, event.inId, event.outId]) if (id) involved.add(id);
+            }
+        }
+
+        const payload = {
+            ...emptyState(),
+            season: this.state.season,
+            teams: this.state.teams.filter((t) => t.id === match.teamId),
+            players: this.state.players.filter((p) => involved.has(p.id)),
+            archivedPlayers: Object.fromEntries(
+                Object.entries(this.state.archivedPlayers).filter(([id]) => involved.has(id)),
+            ),
+            archivedTeams: Object.fromEntries(
+                Object.entries(this.state.archivedTeams).filter(([id]) => id === match.teamId),
+            ),
+            matches: [match],
+        };
+        return JSON.stringify(payload, null, 2);
+    }
+
+    /**
+     * A filename that says what the file is without opening it, and that sorts
+     * by date when a season's worth land in one folder.
+     */
+    matchFileName(matchId) {
+        const match = this.state.matches.find((m) => m.id === matchId);
+        if (!match) return 'volleyball-match.json';
+        const slug = (value) =>
+            String(value ?? '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '');
+        const team = slug(this.team(match.teamId)?.name) || 'team';
+        return `vbstats-${match.date}-${team}-vs-${slug(match.opponent) || 'opponent'}.json`;
     }
 
     /**

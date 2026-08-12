@@ -289,3 +289,47 @@ test('deleting the open set leaves a sensible set selected', () => {
     store.deleteSet(second.id);
     assert.equal(store.state.activeSetId, first.id);
 });
+
+/* --------------------------------------------------- deleting a match */
+
+test('deleting a match removes it and its stats, leaving others alone', () => {
+    const { store, players, team } = seeded();
+    startSet(store, players);
+    store.recordStat(players[0].id, 'kill');
+    const doomed = store.activeMatch.id;
+
+    store.createMatch({ teamId: team.id, opponent: 'Keeper' });
+    startSet(store, players);
+    store.recordStat(players[1].id, 'ace');
+
+    store.deleteMatch(doomed);
+
+    assert.equal(store.state.matches.length, 1);
+    assert.equal(store.state.matches[0].opponent, 'Keeper');
+    const lines = aggregateMatch(store.state.matches[0]);
+    assert.equal(lines.has(players[0].id), false, 'the deleted match took its stats with it');
+    assert.equal(lines.get(players[1].id).serve.aces, 1);
+});
+
+test('deleting the open match closes it rather than leaving a dangling id', () => {
+    const { store, players } = seeded();
+    startSet(store, players);
+    store.recordStat(players[0].id, 'kill');
+
+    store.deleteMatch(store.activeMatch.id);
+
+    assert.equal(store.activeMatch, null);
+    assert.equal(store.activeSet, null);
+    assert.equal(store.liveState, null);
+});
+
+test('a completed match can still be deleted', () => {
+    const { store, players } = seeded();
+    startSet(store, players);
+    winSet(store, 'us', 25);
+    store.endMatch();
+    assert.equal(store.state.matches[0].complete, true);
+
+    store.deleteMatch(store.state.matches[0].id);
+    assert.deepEqual(store.state.matches, []);
+});

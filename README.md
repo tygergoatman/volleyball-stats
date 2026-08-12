@@ -77,19 +77,34 @@ Match data lives in `localStorage` on the device and is **never uploaded** — o
 shared, and only in one direction. Two coaches running the app have two independent sets of
 matches.
 
-That also means **clearing your browser data deletes your season**, so use Roster → Data →
-_Export backup_ periodically.
+That also means **clearing your browser data deletes your season**, so share or save a backup
+periodically.
 
-To combine devices after a game, use **Merge a file**: it adds the other coach's matches to yours
-and leaves your own alone, skipping anything already present. _Replace everything from a file_ is
-the destructive option, for restoring a backup onto a clean device.
+### Getting a match off the phone
+
+**Log tab → Share this match** hands the file to Android's share sheet, so it goes to the shared
+Drive folder, a message, or wherever else in a couple of taps. It contains that one match plus
+only the players and team it refers to — small enough to message, and it merges exactly like a
+full backup because it is one, just a narrower slice. The filename says what it is and sorts by
+date: `vbstats-2026-09-02-jv-vs-cornerstone.json`.
+
+Roster → Data has **Share backup** for the whole device, plus **Save backup to this device** when
+you want a local copy rather than to send it.
+
+Android decides where a shared file goes — the app cannot preselect Drive or a folder, so the
+coach picks the destination. Drive remembers the last folder used, which makes it quick after the
+first time. On desktop, or anywhere file sharing is unsupported, Share downloads instead.
+
+To combine devices, use **Merge a file**: it adds the other coach's matches to yours and leaves
+your own alone, skipping anything already present. _Replace everything from a file_ is the
+destructive option, for restoring a backup onto a clean device.
 
 The workflow this is built around:
 
 1. One person maintains `roster.json`; everyone else just opens the app online once
 2. One scorer per match — two people half-scoring the same game produces two incomplete records
-3. After the game, that scorer exports and sends the file on
-4. Whoever keeps season totals merges it in
+3. After the game, that scorer taps **Share this match** into the shared folder
+4. Whoever keeps season totals merges the files in and exports the season CSV for reporting
 
 Per-set, per-match and season stats can also be exported as CSV from the Stats tab.
 
@@ -230,7 +245,7 @@ Publish the new files and reopen the app with a connection. That is the whole pr
 
 The service worker is **network-first with a cache fallback**: online it serves what is currently
 published, offline it serves the last copy it saw. That is the opposite of the usual app-shell
-advice, and it is deliberate — cache-first meant a change only appeared on the *second* launch and
+advice, and it is deliberate — cache-first meant a change only appeared on the _second_ launch and
 every deploy depended on remembering to bump a version constant by hand, which is exactly the kind
 of step that gets forgotten and then looks like a broken deploy.
 

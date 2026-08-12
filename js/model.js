@@ -49,6 +49,23 @@ export const FRONT_ROW = [2, 3, 4];
 
 export const ROSTER_POSITIONS = ['OH', 'MB', 'S', 'OPP', 'L', 'DS'];
 
+/**
+ * Positions that are worth calling out on the court map: knowing who is setting
+ * and who the libero is matters while capturing; the rest do not.
+ *
+ * These are read from `position` rather than separate flags. Two fields saying
+ * the same thing could disagree, and the roster only ever needs to say it once.
+ */
+export const HIGHLIGHTED_POSITIONS = ['S', 'L'];
+
+export function isSetter(player) {
+    return player?.position === 'S';
+}
+
+export function isLibero(player) {
+    return player?.position === 'L';
+}
+
 /* ------------------------------------------------------------------ stats */
 
 /**

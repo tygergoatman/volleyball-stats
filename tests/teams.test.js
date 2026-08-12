@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Store } from '../js/store.js';
-import { STAT_BY_CODE, STAT_GROUPS, pointFor } from '../js/model.js';
+import { STAT_BY_CODE, STAT_GROUPS, isLibero, isSetter, pointFor } from '../js/model.js';
 import { aggregateSeason, derive } from '../js/stats.js';
 
 class MemoryStorage {
@@ -31,7 +31,7 @@ const ROSTER_FILE = {
     ],
     players: [
         { id: 'p-mia', number: '1', name: 'Mia', teams: ['ms'] },
-        { id: 'p-tess', number: '4', name: 'Tess', isSetter: true, teams: ['jv'] },
+        { id: 'p-tess', number: '4', name: 'Tess', position: 'S', teams: ['jv'] },
         { id: 'p-ella', number: '8', name: 'Ella', teams: ['jv'] },
         { id: 'p-sam', number: '7', name: 'Sam', teams: ['jv', 'var'] },
         { id: 'p-hailey', number: '11', name: 'Hailey', teams: ['var'] },
@@ -482,4 +482,163 @@ test('a dig counts as a dig, not toward the passing average', () => {
 test('a retired code still scores correctly when replaying an old match', () => {
     assert.equal(STAT_BY_CODE.get('digErr')?.retired, true);
     assert.equal(pointFor({ type: 'stat', code: 'digErr' }), 'them');
+});
+
+/* ------------------------------------------------- setter / libero */
+
+test('setter and libero are read from position, not a separate flag', () => {
+    const store = new Store(new MemoryStorage());
+    store.applyRosterFile({
+        version: 2,
+        teams: [{ id: 'jv', name: 'JV' }],
+        players: [
+            { id: 'a', number: '1', name: 'Setter', position: 'S', teams: ['jv'] },
+            { id: 'b', number: '2', name: 'Libero', position: 'L', teams: ['jv'] },
+            { id: 'c', number: '3', name: 'Hitter', position: 'OH', teams: ['jv'] },
+        ],
+    });
+
+    assert.equal(isSetter(store.player('a')), true);
+    assert.equal(isLibero(store.player('b')), true);
+    assert.equal(isSetter(store.player('c')), false);
+    assert.equal(isLibero(store.player('c')), false);
+});
+
+test('a player can no longer be a setter and something else at once', () => {
+    const store = new Store(new MemoryStorage());
+    store.applyRosterFile({
+        version: 2,
+        teams: [{ id: 'jv', name: 'JV' }],
+        // The old shape allowed this contradiction; position now decides.
+        players: [{ id: 'x', number: '1', name: 'Contradiction', position: 'OH', isSetter: true, teams: ['jv'] }],
+    });
+
+    const player = store.player('x');
+    assert.equal(player.position, 'OH', 'the stated position wins');
+    assert.equal(isSetter(player), false);
+    assert.equal(player.isSetter, undefined, 'the redundant flag is not carried forward');
+});
+
+test('an older record with only the flag set keeps its meaning', () => {
+    const store = new Store(new MemoryStorage());
+    store.applyRosterFile({
+        version: 2,
+        teams: [{ id: 'jv', name: 'JV' }],
+        players: [
+            { id: 's', number: '1', name: 'Old Setter', isSetter: true, teams: ['jv'] },
+            { id: 'l', number: '2', name: 'Old Libero', isLibero: true, teams: ['jv'] },
+        ],
+    });
+
+    assert.equal(store.player('s').position, 'S', 'the flag becomes the position');
+    assert.equal(store.player('l').position, 'L');
+    assert.equal(isSetter(store.player('s')), true);
+});
+
+test('saved data from before the collapse migrates', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+        'volleyball-stats.v1',
+        JSON.stringify({
+            version: 3,
+            teams: [{ id: 'jv', name: 'JV' }],
+            players: [{ id: 'x', number: '4', name: 'Tess', isSetter: true, teams: ['jv'] }],
+            matches: [],
+        }),
+    );
+
+    const store = new Store(storage);
+    assert.equal(store.player('x').position, 'S');
+    assert.equal(isSetter(store.player('x')), true);
+});
+
+/* -------------------------------------------------- sharing one match */
+
+test('a single-match export carries only that match', () => {
+    const store = new Store(new MemoryStorage());
+    store.applyRosterFile(rosterFile());
+
+    store.createMatch({ teamId: 'jv', opponent: 'Wanted', date: '2026-09-02' });
+    store.startSet({
+        startingServer: 'us',
+        startingRotation: 1,
+        startingLineup: ['p-tess', 'p-ella', null, null, null, null],
+    });
+    store.recordStat('p-tess', 'kill');
+    const wanted = store.activeMatch.id;
+
+    store.createMatch({ teamId: 'var', opponent: 'Unwanted', date: '2026-09-03' });
+
+    const payload = JSON.parse(store.exportMatchJson(wanted));
+
+    assert.equal(payload.matches.length, 1);
+    assert.equal(payload.matches[0].opponent, 'Wanted');
+    assert.deepEqual(
+        payload.teams.map((t) => t.id),
+        ['jv'],
+        'only the team that played',
+    );
+    assert.deepEqual(payload.players.map((p) => p.id).sort(), ['p-ella', 'p-tess'], 'only the players it refers to');
+});
+
+test('a shared match merges into another device intact', () => {
+    const theirs = new Store(new MemoryStorage());
+    theirs.applyRosterFile(rosterFile());
+    theirs.createMatch({ teamId: 'jv', opponent: 'Away Game', date: '2026-09-02' });
+    theirs.startSet({
+        startingServer: 'us',
+        startingRotation: 1,
+        startingLineup: ['p-tess', null, null, null, null, null],
+    });
+    theirs.recordStat('p-tess', 'kill');
+    theirs.recordStat('p-tess', 'ace');
+    const payload = theirs.exportMatchJson(theirs.activeMatch.id);
+
+    const keeper = new Store(new MemoryStorage());
+    keeper.applyRosterFile(rosterFile());
+    keeper.createMatch({ teamId: 'jv', opponent: 'Home Game', date: '2026-09-01' });
+
+    assert.deepEqual(keeper.mergeJson(payload), { added: 1, skipped: 0 });
+    assert.deepEqual(
+        keeper.state.matches.map((m) => m.opponent),
+        ['Home Game', 'Away Game'],
+    );
+
+    const line = aggregateSeason(keeper.matchesFor('jv')).get('p-tess');
+    assert.equal(line.attack.kills, 1);
+    assert.equal(line.serve.aces, 1);
+});
+
+test('a shared match still names a player the receiving device does not have', () => {
+    const theirs = new Store(new MemoryStorage());
+    theirs.addTeam({ id: 'guest', name: 'Guest' });
+    const guest = theirs.addPlayer({ number: '77', name: 'Guest Player', teams: ['guest'] });
+    theirs.createMatch({ teamId: 'guest', opponent: 'X', date: '2026-09-04' });
+    theirs.startSet({
+        startingServer: 'us',
+        startingRotation: 1,
+        startingLineup: [guest.id, null, null, null, null, null],
+    });
+    theirs.recordStat(guest.id, 'kill');
+
+    const keeper = new Store(new MemoryStorage());
+    keeper.applyRosterFile(rosterFile());
+    keeper.mergeJson(theirs.exportMatchJson(theirs.activeMatch.id));
+
+    assert.equal(keeper.player(guest.id)?.name, 'Guest Player');
+    assert.equal(keeper.team('guest')?.name, 'Guest');
+});
+
+test('the shared filename says what it is and sorts by date', () => {
+    const store = new Store(new MemoryStorage());
+    store.applyRosterFile(rosterFile());
+    store.createMatch({ teamId: 'jv', opponent: 'St. Mary’s', date: '2026-09-02' });
+
+    assert.equal(store.matchFileName(store.activeMatch.id), 'vbstats-2026-09-02-jv-vs-st-mary-s.json');
+});
+
+test('exporting an unknown match is a no-op rather than a crash', () => {
+    const store = new Store(new MemoryStorage());
+    assert.equal(store.exportMatchJson('nope'), null);
+    assert.equal(store.matchFileName('nope'), 'volleyball-match.json');
 });

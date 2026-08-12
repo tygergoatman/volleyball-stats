@@ -1,7 +1,7 @@
 /** Point-by-point log for the active set, plus match and set navigation. */
 
 import { STAT_GROUPS, TEAM_EVENTS, computeSetState, describeEvent, matchScore } from '../model.js';
-import { el, mount, openSheet, closeSheet, toast, confirmDialog } from './dom.js';
+import { el, mount, openSheet, closeSheet, toast, confirmDialog, shareFile } from './dom.js';
 
 export function renderLog(root, store, actions) {
     const match = store.activeMatch;
@@ -53,6 +53,48 @@ function matchPanel(store, match, actions) {
             }),
         ),
         el('p.panel__hint', { text: `Sets ${score.us}–${score.them}` }),
+
+        // The post-game action: send this one match on, without the rest of the
+        // season riding along.
+        el('button.btn.btn--ghost', {
+            type: 'button',
+            text: 'Share this match',
+            onClick: async () => {
+                const payload = store.exportMatchJson(match.id);
+                if (!payload) {
+                    toast('Nothing to share', 'warn');
+                    return;
+                }
+                const result = await shareFile(store.matchFileName(match.id), payload, {
+                    title: `${match.date} · ${store.team(match.teamId)?.name ?? ''} vs ${match.opponent}`.trim(),
+                });
+                if (result === 'shared') toast('Shared');
+                else if (result === 'downloaded') toast('Downloaded — sharing is not available here');
+            },
+        }),
+        el('p.panel__hint', {
+            text: 'Sends just this match, small enough to message. Whoever keeps season totals merges it in from the Roster tab.',
+        }),
+
+        el('button.btn.btn--danger.btn--sm', {
+            type: 'button',
+            text: 'Delete Match',
+            onClick: async () => {
+                const entries = match.sets.reduce((total, set) => total + (set.events?.length ?? 0), 0);
+                const confirmed = await confirmDialog({
+                    title: `Delete the match vs ${match.opponent}?`,
+                    message: `${match.date} · ${match.sets.length} set${
+                        match.sets.length === 1 ? '' : 's'
+                    }, ${entries} recorded ${entries === 1 ? 'entry' : 'entries'}. This cannot be undone — export a backup first if you might want it.`,
+                    confirmLabel: 'Delete Match',
+                    danger: true,
+                });
+                if (confirmed) {
+                    store.deleteMatch(match.id);
+                    toast('Match deleted', 'warn');
+                }
+            },
+        }),
     ]);
 }
 

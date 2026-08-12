@@ -49,7 +49,9 @@ self.addEventListener('install', (event) => {
             // and leave the app with no offline copy at all.
             .then((cache) =>
                 Promise.all(
-                    SHELL.map((path) => cache.add(path).catch((error) => console.warn('Precache skipped', path, error))),
+                    SHELL.map((path) =>
+                        cache.add(path).catch((error) => console.warn('Precache skipped', path, error)),
+                    ),
                 ),
             )
             .then(() => self.skipWaiting()),

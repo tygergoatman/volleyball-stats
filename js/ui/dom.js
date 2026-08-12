@@ -161,6 +161,37 @@ export function confirmDialog({ title, message, confirmLabel = 'Confirm', danger
     });
 }
 
+/**
+ * Hand a file to the OS share sheet, falling back to a download.
+ *
+ * Android cannot be told *where* to share — the picker belongs to the system —
+ * so this gets the file off the phone in as few taps as the platform allows and
+ * leaves the destination to the coach. On desktop, and anywhere file sharing is
+ * unsupported, it downloads instead so the button always does something.
+ *
+ * Must be called straight from a tap: the share sheet needs a user gesture, so
+ * do not await anything before this.
+ *
+ * @returns {Promise<'shared'|'cancelled'|'downloaded'>}
+ */
+export async function shareFile(filename, text, { mime = 'application/json', title = filename } = {}) {
+    const file = new File([text], filename, { type: mime });
+
+    if (navigator.canShare?.({ files: [file] })) {
+        try {
+            await navigator.share({ files: [file], title });
+            return 'shared';
+        } catch (error) {
+            // Dismissing the sheet is a choice, not a failure.
+            if (error?.name === 'AbortError') return 'cancelled';
+            console.warn('Share failed, downloading instead.', error);
+        }
+    }
+
+    downloadText(filename, text, mime);
+    return 'downloaded';
+}
+
 /** Trigger a file download from a string. */
 export function downloadText(filename, text, mime = 'text/plain') {
     const blob = new Blob([text], { type: mime });
