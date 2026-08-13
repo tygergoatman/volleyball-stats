@@ -1,6 +1,6 @@
 /** Point-by-point log for the active set, plus match and set navigation. */
 
-import { STAT_GROUPS, TEAM_EVENTS, computeSetState, describeEvent, matchScore } from '../model.js';
+import { STAT_GROUPS, TEAM_EVENTS, computeSetState, describeEvent, matchScore, playerLabel } from '../model.js';
 import { el, mount, openSheet, closeSheet, toast, confirmDialog, shareFile } from './dom.js';
 
 export function renderLog(root, store, actions) {
@@ -222,13 +222,13 @@ function openEntrySheet(store, entry, set) {
                                     class: player.id === current.playerId ? 'chip--armed' : '',
                                     onClick: () => {
                                         store.updateEvent(current.id, { playerId: player.id });
-                                        toast(`Credited to #${player.number} ${player.name}`);
+                                        toast(`Credited to ${playerLabel(player)}`);
                                         rerender();
                                     },
                                 },
                                 [
                                     el('span.chip__num', { text: `#${player.number}` }),
-                                    el('span.chip__name', { text: player.name }),
+                                    player.name && el('span.chip__name', { text: player.name }),
                                 ],
                             ),
                         ),

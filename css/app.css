@@ -131,7 +131,10 @@ button:disabled {
 
 .tabs {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    /* One equal column per tab, whatever the count — a hardcoded number wrapped
+       the bar onto a second row the moment a fifth tab arrived. */
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
     background: var(--surface);
     border-top: 1px solid var(--border);
     padding-bottom: var(--safe-b);
@@ -159,6 +162,7 @@ button:disabled {
 .tab__label {
     font-size: 11px;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 /* ------------------------------------------------------------- scoreboard */
@@ -1568,4 +1572,147 @@ button:disabled {
     .score__value {
         font-size: 54px;
     }
+}
+
+/* ------------------------------------------------- libero tracking sheet */
+
+/* Informational bench chip: shows availability, does not arm anything. */
+.chip--static {
+    opacity: 0.85;
+}
+
+.panel__hint--warn {
+    color: var(--warn);
+}
+
+/* The Subs: 1..15 row off the paper sheet — crossed off as they are used. */
+.subcount {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 8px 0;
+}
+
+.subcount__n {
+    min-width: 24px;
+    padding: 3px 0;
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.subcount__n--used {
+    background: color-mix(in srgb, var(--warn) 26%, var(--surface-2));
+    color: var(--text);
+    text-decoration: line-through;
+}
+
+.panel__count.is-bad {
+    color: var(--bad);
+}
+
+.lts {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.lts__row {
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    border: 2px solid transparent;
+}
+
+.lts__row--libero {
+    border-color: color-mix(in srgb, var(--set) 60%, transparent);
+}
+
+.lts__main {
+    width: 100%;
+    min-height: var(--tap);
+    display: grid;
+    grid-template-columns: 34px 26px 30px 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    text-align: left;
+    color: var(--text);
+}
+
+.lts__order {
+    font-weight: 800;
+    font-size: 15px;
+    color: var(--muted);
+}
+
+/* The row currently in position 1, i.e. serving. */
+.lts__order--serving {
+    color: var(--serve);
+}
+
+.lts__serves {
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--serve);
+}
+
+.lts__pos {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.lts__entries {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.lts__mark {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+/* Already off the court — the strike-through a book keeper draws. */
+.lts__mark--left {
+    color: var(--muted);
+    opacity: 0.65;
+    font-size: 12px;
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+
+.lts__mark--on {
+    color: var(--text);
+    font-size: 15px;
+}
+
+.lts__row--libero .lts__mark--on {
+    color: var(--set);
+}
+
+.lts__empty {
+    color: var(--muted);
+}
+
+.lts__who {
+    grid-column: 4;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+/* The triangle off the paper sheet: the one rotation the libero may serve in. */
+.lts__order--liberoserve::after {
+    content: '▲';
+    display: block;
+    margin-top: -2px;
+    font-size: 9px;
+    color: var(--set);
 }

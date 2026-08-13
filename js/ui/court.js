@@ -6,6 +6,7 @@ import {
     FRONT_ROW,
     HIGHLIGHTED_POSITIONS,
     MATCH_FORMATS,
+    playerLabel,
     POSITION_LABELS,
     STAT_GROUPS,
     STAT_BY_CODE,
@@ -19,7 +20,6 @@ import {
 import { el, mount, openSheet, closeSheet, toast, buzz, confirmDialog } from './dom.js';
 
 /** Player currently selected for a substitution, if any. */
-let pendingSubId = null;
 
 export function renderCourt(root, store, actions) {
     const match = store.activeMatch;
@@ -34,7 +34,7 @@ export function renderCourt(root, store, actions) {
         root,
         scoreboard(store, live, set),
         courtMap(store, live),
-        benchStrip(store, live),
+        benchStrip(store, live, actions),
         recentStrip(store, live),
         actionBar(store, live, set, actions),
     );
@@ -226,7 +226,7 @@ function setupSetPanel(store, actions) {
                                 player
                                     ? el('span.slot__num', { text: `#${player.number}` })
                                     : el('span.slot__plus', { text: '+' }),
-                                player && el('span.slot__name', { text: player.name }),
+                                player && player.name && el('span.slot__name', { text: player.name }),
                             ],
                         );
                     }),
@@ -307,7 +307,7 @@ function pickPlayerForSlot(store, position, chosen, onPick) {
                 },
                 [
                     el('span.picker__num', { text: `#${player.number}` }),
-                    el('span.picker__name', { text: player.name }),
+                    player.name && el('span.picker__name', { text: player.name }),
                     player.position && el('span.picker__pos', { text: player.position }),
                     chosen.has(player.id) && el('span.picker__flag', { text: 'on court' }),
                 ],
@@ -372,10 +372,6 @@ function courtMap(store, live) {
             {},
             COURT_GRID.map((position) => bubble(store, live, position)),
         ),
-        pendingSubId &&
-            el('div.court__hint', {
-                text: `Tap the player coming off for #${store.player(pendingSubId)?.number ?? ''}`,
-            }),
     ]);
 }
 
@@ -388,7 +384,6 @@ function bubble(store, live, position) {
     const classes = ['bubble'];
     classes.push(isFront ? 'bubble--front' : 'bubble--back');
     if (isServer) classes.push('bubble--server');
-    if (pendingSubId) classes.push('bubble--subtarget');
     if (!player) classes.push('bubble--empty');
 
     return el(
@@ -399,14 +394,6 @@ function bubble(store, live, position) {
             disabled: !player,
             onClick: () => {
                 if (!player) return;
-                if (pendingSubId) {
-                    const incoming = pendingSubId;
-                    pendingSubId = null;
-                    store.recordSub(player.id, incoming);
-                    buzz();
-                    toast(`#${store.player(incoming)?.number} in for #${player.number}`, 'ok');
-                    return;
-                }
                 openStatSheet(store, player, live);
             },
         },
@@ -414,7 +401,7 @@ function bubble(store, live, position) {
             el('span.bubble__pos', { text: String(position) }),
             isServer && el('span.bubble__serve', { text: '🏐', title: 'Serving' }),
             el('span.bubble__num', { text: player ? `#${player.number}` : '—' }),
-            el('span.bubble__name', { text: player ? player.name : 'empty' }),
+            (player ? player.name : 'empty') && el('span.bubble__name', { text: player ? player.name : 'empty' }),
             // Setter and libero are the two worth seeing mid-rally.
             player &&
                 HIGHLIGHTED_POSITIONS.includes(player.position) &&
@@ -425,12 +412,19 @@ function bubble(store, live, position) {
 
 /* ------------------------------------------------------------------ bench */
 
-function benchStrip(store, live) {
+function benchStrip(store, live, actions) {
     const onCourt = new Set(live.lineup.filter(Boolean));
     const bench = store.roster.filter((player) => !onCourt.has(player.id));
 
     if (bench.length === 0) {
-        return el('section.bench', {}, [el('span.bench__empty', { text: 'No bench players' })]);
+        return el('section.bench', {}, [
+            el('span.bench__empty', { text: 'No bench players' }),
+            el('button.btn.btn--ghost.btn--sm', {
+                type: 'button',
+                text: 'Subs & libero →',
+                onClick: () => actions.goToTab('subs'),
+            }),
+        ]);
     }
 
     return el('section.bench', {}, [
@@ -439,30 +433,18 @@ function benchStrip(store, live) {
             'div.bench__scroll',
             {},
             bench.map((player) =>
-                el(
-                    'button.chip',
-                    {
-                        type: 'button',
-                        class: pendingSubId === player.id ? 'chip--armed' : '',
-                        onClick: () => {
-                            pendingSubId = pendingSubId === player.id ? null : player.id;
-                            buzz();
-                            store.commit();
-                        },
-                    },
-                    [el('span.chip__num', { text: `#${player.number}` }), el('span.chip__name', { text: player.name })],
-                ),
+                el('span.chip.chip--static', {}, [
+                    el('span.chip__num', { text: `#${player.number}` }),
+                    player.name && el('span.chip__name', { text: player.name }),
+                ]),
             ),
         ),
-        pendingSubId &&
-            el('button.btn.btn--ghost.btn--sm', {
-                type: 'button',
-                text: 'Cancel sub',
-                onClick: () => {
-                    pendingSubId = null;
-                    store.commit();
-                },
-            }),
+        // Substitutions live on the Subs tab so there is one record of them.
+        el('button.btn.btn--ghost.btn--sm', {
+            type: 'button',
+            text: 'Subs & libero →',
+            onClick: () => actions.goToTab('subs'),
+        }),
     ]);
 }
 
@@ -573,7 +555,7 @@ function openStatSheet(store, player, live) {
                                 buzz(option.point ? [10, 30, 10] : 12);
                                 closeSheet();
                                 const scored = STAT_BY_CODE.get(option.code)?.point;
-                                toast(`#${player.number} ${player.name} — ${option.name}`, scored ?? 'ok');
+                                toast(`${playerLabel(player)} — ${option.name}`, scored ?? 'ok');
                             },
                         }),
                     ),
@@ -583,7 +565,7 @@ function openStatSheet(store, player, live) {
     );
 
     openSheet({
-        title: `#${player.number} ${player.name}`,
+        title: playerLabel(player),
         subtitle: position
             ? `Position ${position} · ${POSITION_LABELS[position]}${player.position ? ` · ${player.position}` : ''}`
             : player.position,
@@ -598,7 +580,9 @@ function toneClass(option) {
     return 'statbtn--neutral';
 }
 
-/** Clear any half-finished substitution, e.g. when leaving the capture tab. */
-export function resetCourtInteraction() {
-    pendingSubId = null;
-}
+/**
+ * Hook for leaving the capture tab. The court holds no half-finished state now
+ * that substitutions live on their own tab, but the tab bar calls this on every
+ * switch and a future interaction will want it.
+ */
+export function resetCourtInteraction() {}

@@ -6,12 +6,14 @@ import { renderCourt, resetCourtInteraction } from './ui/court.js';
 import { renderRoster } from './ui/roster.js';
 import { renderStats } from './ui/statsview.js';
 import { renderLog } from './ui/log.js';
+import { renderSubs } from './ui/subs.js';
 import { el, mount, $, openSheet, closeSheet, toast, confirmDialog } from './ui/dom.js';
 
 const store = new Store(window.localStorage);
 
 const TABS = [
     { key: 'court', label: 'Court', icon: '🏐' },
+    { key: 'subs', label: 'Subs', icon: '🔁' },
     { key: 'stats', label: 'Stats', icon: '📊' },
     { key: 'log', label: 'Log', icon: '📋' },
     { key: 'roster', label: 'Roster', icon: '👥' },
@@ -107,6 +109,12 @@ const actions = {
             ]),
         ]);
         openSheet({ title: 'New match', body });
+    },
+
+    goToTab(key) {
+        activeTab = key;
+        resetCourtInteraction();
+        render();
     },
 
     pickMatch() {
@@ -212,6 +220,7 @@ function render() {
 
     const view = $('#view');
     if (activeTab === 'court') renderCourt(view, store, actions);
+    else if (activeTab === 'subs') renderSubs(view, store, actions);
     else if (activeTab === 'stats') renderStats(view, store);
     else if (activeTab === 'log') renderLog(view, store, actions);
     else renderRoster(view, store);

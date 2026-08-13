@@ -262,7 +262,7 @@ function statTable(store, lines) {
                     el('tr', {}, [
                         el('th.stattable__player', {}, [
                             el('span.stattable__num', { text: `#${player.number}` }),
-                            el('span.stattable__name', { text: player.name }),
+                            player.name && el('span.stattable__name', { text: player.name }),
                         ]),
                         ...columns.map((column) =>
                             el('td', {

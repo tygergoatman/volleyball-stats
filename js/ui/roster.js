@@ -7,7 +7,7 @@
  * spot swing players at a glance.
  */
 
-import { ROSTER_POSITIONS, isLibero, isSetter } from '../model.js';
+import { ROSTER_POSITIONS, isLibero, isSetter, playerLabel } from '../model.js';
 import { APP_VERSION } from '../version.js';
 import { el, mount, openSheet, closeSheet, toast, confirmDialog, downloadText, shareFile } from './dom.js';
 
@@ -40,7 +40,7 @@ function teamsPanel(store) {
         ]),
         el('p.panel__hint', {
             text: file?.updated
-                ? `Shared roster last updated ${file.updated}. Edit roster.json to change it for everyone.`
+                ? `Team labels last updated ${file.updated}. Players are managed here on this device.`
                 : 'Shared roster has not downloaded on this device yet — open the app once with a connection.',
         }),
         store.teams.length === 0
@@ -95,7 +95,7 @@ function removedTeams(store) {
     return el('div.field', {}, [
         el('span.field__label', { text: 'Removed' }),
         el('p.panel__hint', {
-            text: 'Still in the shared roster.json, hidden here. Restoring brings the team and its tags back the next time the app loads online.',
+            text: 'Still in roster.json, hidden here. Restoring brings the team and its tags back the next time the app loads online.',
         }),
         el(
             'div.segmented.segmented--wrap',
@@ -115,6 +115,11 @@ function removedTeams(store) {
 }
 
 /* ---------------------------------------------------------------- players */
+
+/** How many of these players are still number-only. */
+function nameless(players) {
+    return players.filter((player) => !player.name).length;
+}
 
 function playersPanel(store) {
     const all = store.players;
@@ -153,11 +158,18 @@ function playersPanel(store) {
                 text: `${untagged.length} player${untagged.length === 1 ? ' has' : 's have'} no team tag, so they cannot be picked for a lineup.`,
             }),
 
+        // The shared file has numbers but no names, by design. Say so where a
+        // coach meets it, or a blank column just looks like a bug.
+        nameless(shown) > 0 &&
+            el('p.panel__hint', {
+                text: `${nameless(shown)} of these have a number but no name. That is fine — the app reads #7 everywhere. Tap a player to add one; names stay on this phone and are never published.`,
+            }),
+
         shown.length === 0
             ? el('p.panel__hint', {
                   text: filterTeamId
                       ? 'Nobody is tagged for this team yet. Tap a player and add the tag.'
-                      : 'No players yet. Add them here, or to roster.json so every coach gets them.',
+                      : 'No players yet. Tap + Player to build the roster — it stays on this device.',
               })
             : el(
                   'ul.rosterlist',
@@ -169,7 +181,7 @@ function playersPanel(store) {
                               { type: 'button', onClick: () => openPlayerSheet(store, player) },
                               [
                                   el('span.rosterlist__num', { text: `#${player.number}` }),
-                                  el('span.rosterlist__name', { text: player.name }),
+                                  player.name && el('span.rosterlist__name', { text: player.name }),
                                   player.position &&
                                       el('span.tag', {
                                           class: isSetter(player)
@@ -401,7 +413,7 @@ function openPlayerSheet(store, player) {
                     text: 'Delete player',
                     onClick: async () => {
                         const confirmed = await confirmDialog({
-                            title: `Delete #${player.number} ${player.name}?`,
+                            title: `Delete ${playerLabel(player)}?`,
                             message:
                                 'This removes them from the whole program. Stats already recorded stay in past matches. To take them off one team only, untick that team instead.',
                             confirmLabel: 'Delete',
@@ -432,7 +444,7 @@ function openPlayerSheet(store, player) {
     ]);
 
     openSheet({
-        title: isNew ? 'Add player' : `#${player.number} ${player.name}`,
+        title: isNew ? 'Add player' : playerLabel(player),
         subtitle: isNew
             ? 'Added on this device only'
             : player.local

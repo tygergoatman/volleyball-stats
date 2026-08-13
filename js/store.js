@@ -10,7 +10,7 @@
  * team removes a label, not people or the matches they played.
  */
 
-import { DEFAULT_FORMAT, SCHEMA_VERSION, computeSetState, targetForSet } from './model.js';
+import { DEFAULT_FORMAT, SCHEMA_VERSION, computeSetState, isLibero, targetForSet } from './model.js';
 
 const STORAGE_KEY = 'volleyball-stats.v1';
 
@@ -703,8 +703,13 @@ export class Store {
     }
 
     /** Record a substitution in the active set. */
-    recordSub(outId, inId) {
-        return this.pushEvent({ type: 'sub', outId, inId });
+    recordSub(outId, inId, kind = 'sub') {
+        return this.pushEvent({ type: 'sub', kind, outId, inId });
+    }
+
+    /** Everyone on the active team's roster tagged as a libero. */
+    get liberoIds() {
+        return this.roster.filter(isLibero).map((player) => player.id);
     }
 
     pushEvent(event) {

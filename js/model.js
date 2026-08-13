@@ -183,19 +183,40 @@ export function pointFor(event) {
  */
 export function describeEvent(event, playerLookup = () => undefined) {
     if (event.type === 'sub') {
-        const inPlayer = playerLookup(event.inId);
-        const outPlayer = playerLookup(event.outId);
-        return `Sub: #${inPlayer?.number ?? '?'} ${inPlayer?.name ?? ''} in for #${
-            outPlayer?.number ?? '?'
-        } ${outPlayer?.name ?? ''}`.trim();
+        const arriving = playerLookup(event.inId);
+        const leaving = playerLookup(event.outId);
+        if (event.kind === 'libero' || isLibero(arriving) || isLibero(leaving)) {
+            return isLibero(arriving)
+                ? `Libero ${playerLabel(arriving)} in for ${playerLabel(leaving)}`
+                : `${playerLabel(arriving)} back in for libero ${playerLabel(leaving)}`;
+        }
+        return `Sub: ${playerLabel(arriving)} in for ${playerLabel(leaving)}`;
     }
     if (event.type === 'team') {
         return TEAM_EVENT_BY_CODE.get(event.code)?.name ?? event.code;
     }
     const definition = STAT_BY_CODE.get(event.code);
-    const player = playerLookup(event.playerId);
-    const who = player ? `#${player.number} ${player.name}` : 'Unknown player';
+    const who = playerLabel(playerLookup(event.playerId));
     return `${who} — ${definition ? definition.name : event.code}`;
+}
+
+/**
+ * How to refer to a player in a sentence: `#7 Emma`, or just `#7` when no name
+ * is recorded.
+ *
+ * The shared roster file deliberately carries no names — see ROSTER.md — so an
+ * unnamed player is the normal case, not a data error. The number is the
+ * identity everywhere it matters, and it is the one field always present.
+ *
+ * @param {object|undefined} player
+ * @returns {string}
+ */
+export function playerLabel(player) {
+    if (!player) return 'Unknown player';
+    const parts = [];
+    if (player.number) parts.push(`#${player.number}`);
+    if (player.name) parts.push(player.name);
+    return parts.join(' ') || 'Unnamed player';
 }
 
 /* --------------------------------------------------------------- rotation */
