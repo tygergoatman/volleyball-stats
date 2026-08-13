@@ -1,154 +1,125 @@
-# Editing the shared roster
+# Teams and the roster
 
-`roster.json` holds one roster for the whole program, plus the list of teams.
-Every coach's app reads from it — edit it once on GitHub and each phone picks up
-the change the next time it opens with a connection.
+**The roster lives in the app.** Add, edit and delete players on the Roster tab of
+your phone. Nothing about players is stored on GitHub.
 
-You do not need to install anything. Edit it in the browser.
+`roster.json` still exists, but it is now a starter file with one job: give a
+freshly installed app the three team labels, so you are not typing "Junior
+Varsity" on a phone keyboard. Everything else is local.
 
-## How it is put together
+## Never put names in `roster.json`
 
-Two lists. `teams` are just labels; `players` is everyone, and each player says
-which teams they play for:
+This file is published on the open web at the app's own address. Anyone who
+visits `.../roster.json` reads it, no GitHub account needed, and making the
+repository private would not change that — the app fetches the file over plain
+HTTP, so whatever the app can read, so can anyone else.
 
-```json
-{
-    "version": 2,
-    "updated": "2026-08-06",
-    "teams": [
-        { "id": "jv", "name": "JV", "fullName": "Junior Varsity" },
-        { "id": "var", "name": "Var", "fullName": "Varsity" }
-    ],
-    "players": [{ "id": "p-014", "number": "7", "name": "Sam", "position": "OH", "teams": ["jv", "var"] }]
-}
-```
+Git also keeps everything. A name committed here and deleted next week is still
+in the public history, permanently retrievable. There is no clean undo.
 
-Sam is one person on two teams. Her JV and Varsity stats stay separate anyway,
-because season totals are filtered by the matches each team played.
+Player names are typed into the app instead and stay on that phone.
+`tests/privacy.test.js` fails if a name ever appears in this file.
 
-## The one rule
+## Managing the roster in the app
 
-**A player's `id` must be unique and must never change or be reused.**
+Roster tab:
 
-Stats are stored against the id, not the name. Change an id and that player's
-recorded stats are orphaned; reuse an old id for a different player and the two
-get merged. Names, numbers, positions and team tags are all safe to change at any
-time — only the id is permanent.
+- **+ Player** — number, name, position, and which teams they play for. A player
+  can carry more than one team tag.
+- **Tap a player** — edit any of that, or **Delete player** to remove them from
+  the program. Stats already recorded stay in past matches either way.
+- **The filter row** — All, one button per team, and No team if anyone is
+  untagged. This is how you answer "who is on JV?".
+- **+ Team** and the **⋯** on a team — add, rename or remove teams.
 
-Ids do not have to mean anything. `p-014` is fine. Deliberately **not** tying them
-to jersey numbers avoids the temptation to change one when a number changes:
+Names are optional. Skip them and the app reads `#7` everywhere, which is what it
+leads with courtside anyway.
 
-```json
-{ "id": "p-014", "number": "12", "name": "Sam" }
-```
+### Somebody who plays two teams
 
-## Editing it
+**Give them one entry per team**, because they almost always wear a different
+number on each — and the number is how the app names them. Nothing is lost:
+season totals are filtered by the matches each team played, so their JV and
+Varsity stats were never going to be added together regardless.
 
-1. Open `roster.json` in your repository on GitHub.
-2. Click the pencil icon.
-3. Make your change.
-4. Change the `updated` date at the top — the app shows it on the Roster tab, so
-   coaches can tell whether their phone has the latest list.
-5. Click **Commit changes**.
+Two tags on one entry is right only in the rarer case where the number is the
+same on both.
 
-Give GitHub Pages a minute to publish, then reopen the app on a phone that has a
-connection. The Roster tab will show the new `updated` date.
+### Moving a player between teams
 
-## Adding a player
+Same number, moving up: tick the new team, untick the old one.
 
-Add an object to `players`. Only `id`, `number`, `name` and `teams` matter:
+Different number: **leave the old entry alone and add a new one.** The old entry
+holds the JV stats already recorded; the new one starts clean. Editing the number
+on the existing entry would make every stat recorded under it retroactively
+appear to belong to the new number.
 
-```json
-{ "id": "p-023", "number": "23", "name": "Riley", "position": "MB", "teams": ["var"] }
-```
+## Your roster is only on this phone
 
-Watch the commas — every entry needs one after it **except the last in the list**.
-A stray comma is the most common way to break the file.
+This is the trade for keeping names off the internet, and it is worth being blunt
+about: clearing your browser data deletes the roster **and the season**.
 
-`position` accepts `OH`, `MB`, `S`, `OPP`, `L` or `DS`. Choosing `S` or `L` is what
-marks the setter and the libero on the court map — there is no separate flag for
-either, so the roster cannot contradict itself.
+Roster tab → Data → **Save backup to this device** writes a file with everything
+in it. Do that after you set the roster up, and periodically during the season.
+**Share backup** sends the same file somewhere safer.
 
-## Moving a player between teams
+`roster.json` will restore the team labels on a new device. It will not restore
+players — only your backup does that.
 
-Change their `teams` list. Moving up from JV to Varsity mid-season:
+## Editing `roster.json`
 
-```json
-{ "id": "p-014", "teams": ["var"] }
-```
+Only if you want to change the team labels a _newly installed_ app starts with.
+Changing them here does not rename teams on a phone that already has them; the
+app remembers its own names once it has them.
 
-Playing both:
-
-```json
-{ "id": "p-014", "teams": ["jv", "var"] }
-```
-
-Stats already recorded stay where they were — a kill in a JV match stays in the
-JV column no matter what tags the player carries afterwards.
-
-If your file still has `"isSetter": true` or `"isLibero": true` from an earlier
-version, it keeps working — the app reads them as position `S` and `L` when no
-position is given. You can delete them; `position` is the only place this is
-recorded now.
-
-## Removing a player
-
-Delete their object from `players`. Their past stats are not lost — the app keeps
-a copy of anyone dropped from the file so old matches still show their name. They
-simply stop appearing on the roster.
-
-To take somebody off one team but keep them in the program, remove that team from
-their `teams` list rather than deleting the whole entry.
-
-## Adding a team
-
-Add an entry to `teams`. `id` is permanent for the same reason player ids are;
-`name` is the short label on the buttons, `fullName` is shown as a heading.
-Teams appear in the app in the order they are listed here.
+1. Open `roster.json` in your repository on GitHub, click the pencil icon.
+2. Edit the `teams` list. `id` is permanent — the app files everything against it.
+   `name` is the short button label, `fullName` the heading. They appear in the
+   app in the order listed here.
+3. Change the `updated` date. The Roster tab shows it, which is how you tell the
+   file actually landed.
+4. **Commit changes.**
 
 ```json
 { "id": "c-team", "name": "C", "fullName": "C Team" }
 ```
 
-Then add `"c-team"` to the `teams` list of whoever plays for it.
+Removing a team here only affects apps that have not already downloaded it.
+Removing one **in the app** is the real removal, and it is deliberately gentle: it
+drops that tag from every player and hides the team on that device. Nobody is
+deleted and no matches are lost. The app remembers the removal so this file cannot
+put the team back, and offers a Restore button if it was a mistake.
 
-## Removing a team
+### If the file has a syntax error
 
-Deleting a team from this file removes it for anyone whose app has not already
-downloaded it. It does **not** reach onto devices that already have it.
+The app ignores a file it cannot parse and keeps what is already on the device —
+deliberately, so a bad edit can never wipe a roster mid-match. That also means a
+broken file fails silently. Check the "Team labels last updated" line on the
+Roster tab; if the date has not moved after a minute, it did not parse. A trailing
+comma is almost always the culprit.
 
-Removing a team **in the app** is a separate thing, and it is deliberately gentle:
-it drops that tag from every player and hides the team on that one device. Nobody
-is deleted and no matches are lost. The app remembers the removal so this file
-cannot put the team back, and offers a Restore button if it was a mistake.
+The app is also fine with no `roster.json` at all. A fresh device then starts with
+no teams and says so, and you build them with **+ Team**.
 
-So: edit this file to change the program; use the app to tidy up a single phone.
-To retire a team everywhere, do both.
+## If you ever do put players in the file
 
-## If the file has a syntax error
+Supported, and the sensible choice if several coaches ever share one program
+roster and you would rather type it on a keyboard than a phone. Numbers only:
 
-The app ignores a file it cannot parse and quietly keeps the roster already on the
-device — deliberately, so a bad edit can never wipe out a roster mid-match.
+```json
+{ "id": "p-023", "number": "23", "position": "MB", "teams": ["var"] }
+```
 
-That also means a broken file fails silently. To check a change landed, open the
-Roster tab and look at the "Shared roster last updated" line. If it still shows
-the old date after a minute, the file did not parse. GitHub highlights JSON syntax
-errors in the editor, and a trailing comma is almost always the culprit.
+Two things to know before you do:
 
-## An older file still works
+- **A player's `id` must be unique and must never change or be reused.** Stats are
+  filed against the id. Change one and that player's history is orphaned; reuse an
+  old one and two players merge.
+- **Deleting a file player in the app does not stick.** The next online load
+  re-adds them, because the file is treated as the source of truth for anyone it
+  lists. Remove them from the file instead. (Teams do not have this problem — a
+  team removal is remembered.)
 
-If your `roster.json` still nests a `players` list inside each team — the shape
-this app used first — it will keep loading, and anyone appearing under two teams
-is folded into one player with both tags. Moving to the layout above is worth
-doing anyway, because it is the one place a swing player is written once.
-
-## What stays on the device
-
-`roster.json` covers teams and players. It does not carry match data — stats live
-only on the phone that recorded them and are never uploaded.
-
-Players added through the app's Roster tab are marked **added on this device** and
-are kept when the file refreshes. Edits made in the app to a player from the file
-also stick on that device, which means that phone stops tracking the file for that
-field. For anything the whole program should see, edit `roster.json` rather than
-the app.
+`position` accepts `OH`, `MB`, `S`, `OPP`, `L` or `DS`. Choosing `S` or `L` is what
+marks the setter and libero on the court map — there is no separate flag, so the
+roster cannot contradict itself.

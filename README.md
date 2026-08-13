@@ -31,20 +31,41 @@ which matters in gyms.
 ## Teams and the roster
 
 There is **one roster for the whole program**. Teams — MS, JV and Varsity out of the box — are
-tags a player carries. Somebody who swings between JV and Varsity is a single entry with two tags,
-not two records, and their row shows both.
+tags a player carries, and a player can carry more than one.
+
+Somebody who swings between JV and Varsity normally gets **one entry per team**, because they wear
+a different number on each and the number is how the app names them. That costs nothing: season
+totals are filtered by the matches each team played, so their JV and Varsity stats were never
+combined anyway. Two tags on one entry is for the rarer case where the number is the same on both.
 
 When you create a match you pick the team, and the match draws its pool from everyone carrying
 that tag. The Stats tab scopes season totals per team, so a swing player's JV and Varsity numbers
 stay separate — each is filtered by the matches that team actually played.
 
-The roster comes from [`roster.json`](./roster.json), published alongside the app. That file is the
-shared source of truth: edit it once on GitHub and every coach's phone picks it up the next time
-it loads with a connection. See [ROSTER.md](./ROSTER.md) for how to edit it — the rule that
-matters is that a player's `id` must never change or be reused.
+**The roster lives on the phone.** Players are added, edited and deleted on the Roster tab, and
+nothing about them is stored on GitHub. [`roster.json`](./roster.json), published alongside the
+app, is a starter file with one job: give a freshly installed app the team labels so nobody types
+"Junior Varsity" on a phone keyboard.
 
-Players can also be added on a single device from the Roster tab. They are marked **added on this
-device** and survive roster-file refreshes, but nobody else sees them.
+That is the whole split, and it is deliberate. See [ROSTER.md](./ROSTER.md).
+
+The trade is that clearing your browser data deletes the roster along with the season, so
+**Save backup to this device** after you set it up. `roster.json` restores the team labels on a new
+device; only a backup restores the players.
+
+### Why no names are published
+
+`roster.json` is published on the open web at the app's own address, so anyone who visits
+`.../roster.json` can read it — and a private repository would not change that, because the app
+fetches the file over plain HTTP. Git also keeps everything: a name committed and deleted later is
+still in the public history for good.
+
+So the published file carries **team labels and nothing else**. Names are typed on each coach's own
+phone and never leave it, and a coach happy working from numbers can skip them entirely — the app
+reads `#7` wherever a name is missing, which is what it leads with courtside anyway.
+
+`tests/privacy.test.js` fails if a name ever finds its way into the file, including in the
+supported-but-unused case where somebody lists players there.
 
 ### Managing them
 
@@ -74,7 +95,8 @@ Renaming a team from roster.json applies to this device only, the same way playe
 ## Data
 
 Match data lives in `localStorage` on the device and is **never uploaded** — only the roster is
-shared, and only in one direction. Two coaches running the app have two independent sets of
+shared, only in one direction, and only as numbers. Two coaches running the app have two
+independent sets of
 matches.
 
 That also means **clearing your browser data deletes your season**, so share or save a backup
@@ -189,28 +211,70 @@ counts as a dig and is deliberately kept out of the passing average.
 Hitting percentage is the standard `(K − 0) / attempts` — kills minus attack errors over total
 attempts — so it can be negative.
 
-### Substitutions
+### Substitutions and the libero — the Subs tab
 
-Tap a bench chip to arm it (it outlines green), then tap the player coming off. The incoming
-player takes that court position and rotates from there. Tap the chip again to cancel.
+Every replacement happens on the **Subs** tab, which is laid out like the paper libero tracking
+sheet a book keeper fills in. Subs only ever happen at a stoppage, so there is nothing to gain from
+also doing them mid-rally on the court map — and one place to record them means one record.
+
+Six rows, serving order I to VI. Each shows who started there, everyone who has been on since
+(departed players struck through, exactly like the paper), how many terms of service the row has
+had, and the court position it is currently standing in. Tap a row to send the libero on or off, or
+to substitute.
+
+None of that is stored. Serving order is the starting lineup — the player in position 1 serves
+first, and rotation brings position 2 to position 1 next — and because rotation shifts all six
+uniformly while a substitution replaces a player in place, the order never scrambles for the whole
+set. So the sheet is replayed from the same events as the score.
+
+**The one thing the app has to be told is whether a replacement was a libero swap or a
+substitution**, because that cannot be inferred from the rally and it is the distinction the rules
+turn on. A team gets 15 substitutions per set; libero replacements are unlimited and count against
+nothing. The counter across the top is the `Subs: 1..15` row off the paper sheet.
+
+A libero may replace different players all set, but may serve in **only one** rotation. You never
+tell the app which — it is whichever rotation the libero first actually serves from, marked with a
+**▲** on that row, exactly like the triangle on the paper sheet. Serving from a second one is warned
+about, including before it happens when the libero is standing in a row that is about to serve.
+
+**Two liberos** can be designated, which current rules allow. They share one serving rotation between
+them, only one is ever on court at a time, and rows read `L7` / `L19` instead of a bare `L` so you
+can tell which is on.
+
+Other things the sheet does for you:
+
+- A player the libero has replaced is **not** offered as a substitute elsewhere. They are the only
+  one who may come back for the libero, so using them in another position would both break that and
+  put the same player on court twice.
+- It warns when the libero has rotated into the front row. It warns and does not block — a
+  courtside tool that refuses to record what actually happened is worse than one that records it
+  and says so. The same goes for a 16th substitution.
+
+Sets recorded before this existed read every libero swap as an ordinary substitution, since the
+distinction was not captured at the time. The sheet falls back to "was a libero involved", which
+gets old data close, but only newly recorded sets are exact.
+
+The court map still shows the bench so you can see who is available; it just does not act on it.
 
 ## Layout
 
 ```
 volleyball-stats/
 ├── index.html              shell: header, view, tab bar
-├── roster.json             shared rosters for every team — see ROSTER.md
+├── roster.json             shared roster: numbers only, no names — see ROSTER.md
 ├── manifest.webmanifest    PWA metadata
 ├── sw.js                   offline precache (roster.json is network-first)
 ├── css/app.css
 ├── js/
 │   ├── model.js            stat definitions, rotation maths, set replay  (pure)
+│   ├── libero.js           libero tracking sheet and sub counting          (pure)
 │   ├── stats.js            aggregation and derived metrics               (pure)
 │   ├── store.js            state, persistence, actions
 │   ├── app.js              tab routing, match lifecycle, wake lock
 │   └── ui/
 │       ├── dom.js          element helper, bottom sheet, toast
 │       ├── court.js        capture view and stat sheet
+│       ├── subs.js          libero tracking sheet, substitutions
 │       ├── statsview.js    stat tables and rotation breakdown
 │       ├── roster.js       roster, team settings, backup
 │       └── log.js          point-by-point log
@@ -227,15 +291,19 @@ node --test "volleyball-stats/tests/*.test.js"
 ```
 
 These cover the parts that are easy to get subtly wrong and hard to notice courtside: rotation
-direction, side-out timing, undo/delete recalculation, hitting percentage, and persistence.
+direction, side-out timing, undo/delete recalculation, hitting percentage, and persistence. They
+also guard the one mistake that cannot be undone — a player name reaching the published
+`roster.json`.
 
 ## Known gaps
 
-- **Libero tracking** — a player can be flagged as libero on the roster, but the app does not
-  model libero replacements separately from ordinary substitutions or enforce back-row rules.
+- **Opponent tracking** — the paper sheet covers both teams; this covers yours. The opponent is
+  just a score.
+- **Libero rules are tracked, not enforced** — replacements are counted separately and front-row
+  rotation is flagged, but the app does not check that a rally has been completed between
+  replacements, or that the libero serves in only one rotation.
 - **Set/assist linkage** — set ratings are captured, but a set is not tied to the kill that
   followed it, so there is no assist column.
-- **Opponent stats** — only your own team's players are tracked; the opponent is just a score.
 - **A device with no connection cannot pick up an update**, by design — it keeps the last copy it
   saw so it still works in a gym. Open the app once with signal to move it forward.
 
