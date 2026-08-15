@@ -233,6 +233,24 @@ export function rotateLineup(lineup) {
 }
 
 /**
+ * Rotate a lineup `count` times, forwards or backwards.
+ *
+ * Used by the set setup screen: a lineup is entered in serving order, and
+ * picking "starting rotation N" turns it into the arrangement where the Nth
+ * player in that order is the one serving.
+ *
+ * @param {Array<string|null>} lineup
+ * @param {number} count may be negative
+ * @returns {Array<string|null>} a new array
+ */
+export function rotateLineupBy(lineup, count) {
+    const times = ((count % 6) + 6) % 6;
+    let next = lineup.slice();
+    for (let i = 0; i < times; i++) next = rotateLineup(next);
+    return next;
+}
+
+/**
  * Advance the rotation counter, wrapping 6 back to 1.
  *
  * @param {number} rotation

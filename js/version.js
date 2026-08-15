@@ -5,4 +5,4 @@
  * published?" without guesswork. Bump it whenever you publish; nothing depends
  * on the format beyond being visibly different from the last one.
  */
-export const APP_VERSION = '2026.08.14a';
+export const APP_VERSION = '2026.08.14b';

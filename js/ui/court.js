@@ -8,6 +8,7 @@ import {
     MATCH_FORMATS,
     playerLabel,
     POSITION_LABELS,
+    rotateLineupBy,
     STAT_GROUPS,
     STAT_BY_CODE,
     TEAM_EVENTS,
@@ -195,11 +196,19 @@ function setupSetPanel(store, actions) {
                     {},
                     [1, 2, 3, 4, 5, 6].map((n) =>
                         toggleButton(String(n), draft.startingRotation === n, () => {
+                            // Actually rotate what is on the map. Setting the
+                            // number alone left the court unchanged, which made
+                            // the control look broken — and it was: the lineup
+                            // went in untouched and merely got labelled.
+                            draft.lineup = rotateLineupBy(draft.lineup, n - draft.startingRotation);
                             draft.startingRotation = n;
                             rerender();
                         }),
                     ),
                 ),
+                el('p.panel__hint', {
+                    text: 'Enter the lineup in serving order, then pick the rotation you are starting in — rotation 4 puts the 4th player in the serving spot. The court above moves as you pick, so it should match the floor.',
+                }),
             ]),
 
             el('div.court.court--setup', {}, [

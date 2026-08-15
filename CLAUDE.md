@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.14a** (`js/version.js`).
+Current version: **2026.08.14b** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 142 tests, all pure modules
+node --test "tests/*.test.js"                          # 144 tests, all pure modules
 ```
 
 **Run it in a browser before claiming anything works.** Every bug that reached the user was invisible
@@ -136,6 +136,20 @@ than a bare `L`, since `L` alone would be ambiguous.
 
 Sets recorded before `kind` existed fall back to "was a libero involved", which gets old data close
 but not exact.
+
+## Starting rotation
+
+Entered lineup = serving order. Picking **starting rotation N** rotates it so the Nth player in that
+order is the one serving, and the setup court map re-renders as you tap.
+
+This was broken until 2026.08.14b: `startingRotation` was stored and fed into the rotation counter,
+but never applied to `startingLineup`, so the lineup went in exactly as placed and merely got
+labelled. The control looked inert because it was. `rotateLineupBy` in `model.js` does the work, and
+the button applies the delta from the current rotation so tapping around composes correctly.
+
+Because the map moves, the numbering convention does not have to be argued about — tap until the
+court matches the floor. Sets recorded before the fix hold whatever lineup was placed, which was
+being taken literally, so they are still self-consistent.
 
 ## Deploying
 

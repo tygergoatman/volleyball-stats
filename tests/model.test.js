@@ -10,6 +10,7 @@ import {
     pointFor,
     positionOf,
     rotateLineup,
+    rotateLineupBy,
     setWinner,
 } from '../js/model.js';
 
@@ -210,4 +211,35 @@ test('describeEvent names players, team events and subs', () => {
     assert.equal(describeEvent(stat('p1', 'kill'), lookup), '#4 Tess — Kill');
     assert.equal(describeEvent(team('oppError'), lookup), 'Opponent error');
     assert.equal(describeEvent({ type: 'sub', outId: 'p1', inId: 'p9' }, lookup), 'Sub: #16 McKenna in for #4 Tess');
+});
+
+test('rotateLineupBy turns a serving order into the rotation that is starting', () => {
+    const lineup = ['a', 'b', 'c', 'd', 'e', 'f'];
+
+    // Rotation 1 is the lineup as entered: the first player serves.
+    assert.deepEqual(rotateLineupBy(lineup, 0), lineup);
+
+    // Rotation 4 means the 4th player in the order is serving, so they are the
+    // one standing in position 1.
+    assert.equal(rotateLineupBy(lineup, 3)[0], 'd');
+
+    // Rotation 6: the last of the six serves, and the first has moved round.
+    const sixth = rotateLineupBy(lineup, 5);
+    assert.equal(sixth[0], 'f');
+    assert.equal(sixth.indexOf('a'), 1, 'the first server is now in position 2');
+
+    // Six rotations is a full circle, and the helper takes negatives for
+    // stepping back from a higher rotation to a lower one.
+    assert.deepEqual(rotateLineupBy(lineup, 6), lineup);
+    assert.deepEqual(rotateLineupBy(lineup, -1), rotateLineupBy(lineup, 5));
+    assert.deepEqual(rotateLineupBy(rotateLineupBy(lineup, 5), -5), lineup);
+});
+
+test('stepping between rotations composes, so tapping around lands right', () => {
+    const lineup = ['a', 'b', 'c', 'd', 'e', 'f'];
+    // 1 -> 6 -> 3 should equal going straight to 3.
+    let current = rotateLineupBy(lineup, 6 - 1);
+    current = rotateLineupBy(current, 3 - 6);
+    assert.deepEqual(current, rotateLineupBy(lineup, 3 - 1));
+    assert.equal(current[0], 'c', 'rotation 3 puts the 3rd player in to serve');
 });

@@ -159,7 +159,12 @@ puts it away — use the **+1 Us / +1 Them** buttons under the court. Without th
 would drift, since not every point involves an action by one of your players.
 
 Your team rotates automatically on a side-out (winning a rally while the opponent was serving).
-The rotation counter runs 1 → 6 and wraps, starting from whichever rotation you pick at set setup.
+The rotation counter runs 1 → 6 and wraps.
+
+At set setup, enter the lineup **in serving order**, then pick the rotation you are starting in:
+rotation 4 puts the 4th player of that order into the serving spot. The court map above moves as you
+tap, so you can simply tap until it matches the floor rather than worrying about whose numbering
+convention is in play.
 
 ### Match format
 
