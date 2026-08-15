@@ -234,8 +234,13 @@ nothing. The counter across the top is the `Subs: 1..15` row off the paper sheet
 
 A libero may replace different players all set, but may serve in **only one** rotation. You never
 tell the app which — it is whichever rotation the libero first actually serves from, marked with a
-**▲** on that row, exactly like the triangle on the paper sheet. Serving from a second one is warned
-about, including before it happens when the libero is standing in a row that is about to serve.
+**▲** on that row, exactly like the triangle on the paper sheet. It resets each set.
+
+The mark is a triangle drawn around the numeral, matching the paper. If a libero does end up serving
+from a second rotation, that is reported as the violation it is.
+
+Each row also shows where it is standing right now: `P1 RB`, `P4 LF`, and so on. That is what the
+front-row libero warning watches, and `P1` is always the row serving.
 
 **Two liberos** can be designated, which current rules allow. They share one serving rotation between
 them, only one is ever on court at a time, and rows read `L7` / `L19` instead of a bare `L` so you

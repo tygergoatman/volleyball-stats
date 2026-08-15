@@ -283,3 +283,36 @@ test('both liberos are reserved-aware independently', () => {
     const { awaitingLiberoReturn } = twoLiberoSheet([liberoSwap('p5', LIBERO), liberoSwap('p6', LIBERO_B)]);
     assert.deepEqual(awaitingLiberoReturn.sort(), ['p5', 'p6']);
 });
+
+test('a libero adrift in the rotation is reported once, not twice', () => {
+    // A libero never rotates towards serving: they stand in 1, 5 and 6, entering
+    // at position 1. Being in position 2 — one rotation from serving — means the
+    // record is wrong, and that is already a front-row error. It must not also be
+    // reported as an impending serve violation.
+    const rally = [themPoint(), usPoint()];
+    // Four side-outs put row V in position 1 (the libero serves, locking it) and
+    // row VI in position 2. Moving the libero there is the mistake.
+    const lock = [liberoSwap('p5', LIBERO), ...rally, ...rally, ...rally, ...rally];
+    const adrift = [...lock, liberoSwap(LIBERO, 'p5'), liberoSwap('p6', LIBERO)];
+
+    const { rows, warnings } = sheet(adrift);
+    assert.equal(rows[5].courtPosition, 2, 'row VI is in position 2');
+    assert.deepEqual(warnings, ['Libero is in position 2 — front row.']);
+});
+
+test('serving from a second row is still reported after the fact', () => {
+    const rally = [themPoint(), usPoint()];
+    const events = [
+        liberoSwap('p5', LIBERO),
+        ...rally,
+        ...rally,
+        ...rally,
+        ...rally,
+        liberoSwap(LIBERO, 'p5'),
+        liberoSwap('p6', LIBERO),
+        ...rally,
+    ];
+    const serveWarnings = sheet(events).warnings.filter((w) => /serve/.test(w));
+    assert.equal(serveWarnings.length, 1, `one warning, got: ${JSON.stringify(serveWarnings)}`);
+    assert.match(serveWarnings[0], /only serve in one rotation/);
+});

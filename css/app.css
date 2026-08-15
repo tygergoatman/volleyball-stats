@@ -1633,19 +1633,38 @@ button:disabled {
     border-color: color-mix(in srgb, var(--set) 60%, transparent);
 }
 
+/* Header and rows share one grid so the columns line up. */
+.lts__head,
+.lts__main {
+    display: grid;
+    grid-template-columns: 42px 22px 38px 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+}
+
+.lts__head {
+    margin-top: 8px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+}
+
 .lts__main {
     width: 100%;
     min-height: var(--tap);
-    display: grid;
-    grid-template-columns: 34px 26px 30px 1fr;
-    align-items: center;
-    gap: 8px;
     padding: 8px 10px;
     text-align: left;
     color: var(--text);
 }
 
 .lts__order {
+    /* A fixed box so the triangled variant lines up with the plain ones. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
     font-weight: 800;
     font-size: 15px;
     color: var(--muted);
@@ -1663,9 +1682,20 @@ button:disabled {
 }
 
 .lts__pos {
-    font-size: 11px;
-    font-weight: 700;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
     color: var(--muted);
+}
+
+.lts__posnum {
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.lts__poslabel {
+    font-size: 9px;
+    letter-spacing: 0.04em;
 }
 
 .lts__entries {
@@ -1708,11 +1738,29 @@ button:disabled {
     color: var(--muted);
 }
 
-/* The triangle off the paper sheet: the one rotation the libero may serve in. */
-.lts__order--liberoserve::after {
-    content: '▲';
-    display: block;
-    margin-top: -2px;
-    font-size: 9px;
+/*
+ * The triangle off the paper sheet, drawn *around* the serving-order numeral the
+ * way a book keeper draws it — the one rotation the libero may serve in.
+ *
+ * An SVG background rather than borders or clip-path, because what is wanted is
+ * an outline with nothing filled, and the numeral has to sit inside it. The
+ * colour is baked into the data URI since custom properties do not resolve
+ * inside one; keep it in step with --set.
+ */
+.lts__order--liberoserve {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 88'%3E%3Cpath d='M50 6 L95 82 L5 82 Z' fill='none' stroke='%23a855f7' stroke-width='6' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 40px 34px;
     color: var(--set);
+    /* The numeral sits in the wide base of the triangle, not its point. */
+    align-items: flex-end;
+    padding-bottom: 4px;
+    font-size: 12px;
+    line-height: 1;
+}
+
+/* Serving *and* the libero's rotation: keep the triangle, keep the amber. */
+.lts__order--serving.lts__order--liberoserve {
+    color: var(--serve);
 }

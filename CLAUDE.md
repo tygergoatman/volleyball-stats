@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.13e** (`js/version.js`).
+Current version: **2026.08.14a** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 140 tests, all pure modules
+node --test "tests/*.test.js"                          # 142 tests, all pure modules
 ```
 
 **Run it in a browser before claiming anything works.** Every bug that reached the user was invisible
@@ -111,9 +111,22 @@ only happen at stoppages, so there is nothing to gain from a second way to recor
 
 **The serving row — the triangle on the paper sheet.** A libero may replace different players all
 set, but may serve in only **one** rotational row. That row is never declared: it is whichever row a
-libero first actually serves from, captured during replay (`liberoServeRow`). Serving from a second
-row afterwards is warned about, both when it happens and, more usefully, when the libero is standing
-in a row that is about to serve and is not the locked one.
+libero first actually serves from, captured during replay (`liberoServeRow`). It is per set, which is
+why the paper sheet's triangle moves between sets.
+
+It is marked the way the paper marks it: an SVG triangle drawn **around** the serving-order numeral,
+with the numeral seated in its base. Borders and clip-path cannot give an outline with the text
+inside it, hence the background image; the stroke colour is baked into the data URI because custom
+properties do not resolve inside one, so keep it in step with `--set`.
+
+**There is deliberately no "about to serve from the wrong row" warning**, and it should not be added
+back. A libero only ever stands in positions 1, 5 and 6 — they _enter_ at position 1 to serve rather
+than rotating into it, and come off before the row reaches the front. So the only way to be one
+rotation from serving is to be in position 2, which is front row, which the front-row check already
+reports. An earlier build warned on both and double-reported one impossible state. A test pins that
+a libero adrift in the rotation produces exactly one warning.
+
+Serving from a second row after the fact is still reported — that one is real, and reachable.
 
 **Two liberos may be designated** — current rules allow it, and the app supports it even though the
 owner runs one. They share a single serving row between them; a second libero does not get a second

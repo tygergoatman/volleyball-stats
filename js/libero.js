@@ -204,12 +204,12 @@ function warningsFor(rows, { serveRow, serveRowBreaches, liberosOnCourt }) {
         );
     }
 
-    // The same thing before it happens, which is the useful half: the libero is
-    // in the row about to serve, and it is not the row they are locked to.
-    const upNext = rows.find((row) => row.serving);
-    if (upNext && upNext.hasLibero && serveRow !== null && serveRow !== upNext.index) {
-        out.push(`Libero is about to serve from order ${upNext.order}, but is locked to ${SERVING_ORDER[serveRow]}.`);
-    }
+    // There is deliberately no "about to serve from the wrong row" warning. A
+    // libero only ever stands in positions 1, 5 and 6 — they enter at position 1
+    // to serve rather than rotating into it, and come off before the row reaches
+    // the front. So the only way to be one rotation from serving illegally is to
+    // be in position 2, which is front row, which the check above already
+    // reports. Two warnings for one impossible state is noise.
 
     return out;
 }

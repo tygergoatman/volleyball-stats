@@ -9,7 +9,7 @@
  */
 
 import { SERVING_ORDER, liberoSheet } from '../libero.js';
-import { playerLabel } from '../model.js';
+import { POSITION_LABELS, playerLabel } from '../model.js';
 import { el, mount, openSheet, closeSheet, toast, buzz } from './dom.js';
 
 export function renderSubs(root, store, actions) {
@@ -82,7 +82,7 @@ function countPanel(store, set, sheet) {
 
         sheet.liberoServeRow !== null &&
             el('p.panel__hint', {
-                text: `▲ Libero serves in order ${SERVING_ORDER[sheet.liberoServeRow]} — set the first time they served, and the only rotation they may serve in.`,
+                text: `Libero serves in order ${SERVING_ORDER[sheet.liberoServeRow]} — triangled below. Set the first time they served, and the only rotation they may serve in.`,
             }),
 
         ...sheet.warnings.map((warning) => el('p.panel__hint.panel__hint--warn', { text: `⚠ ${warning}` })),
@@ -95,6 +95,17 @@ function rowsPanel(store, sheet) {
     return el('section.panel', {}, [
         el('h2.panel__title', { text: 'Serving order' }),
         el('p.panel__hint', { text: 'Tap a row to send the libero on or off, or to substitute.' }),
+
+        // Four columns that are not self-explanatory without a label: the fixed
+        // serving order, terms of service, where the row is standing right now,
+        // and its history.
+        el('div.lts__head', {}, [
+            el('span', { text: 'ORDER' }),
+            el('span', { text: 'SVC' }),
+            el('span', { text: 'POS' }),
+            el('span', { text: 'ON COURT' }),
+        ]),
+
         el(
             'ul.lts',
             {},
@@ -120,7 +131,10 @@ function ltsRow(store, sheet, row) {
                 text: row.serves > 0 ? '|'.repeat(Math.min(row.serves, 6)) : '',
                 title: `${row.serves} term${row.serves === 1 ? '' : 's'} of service`,
             }),
-            el('span.lts__pos', { text: `P${row.courtPosition}` }),
+            el('span.lts__pos', {}, [
+                el('span.lts__posnum', { text: `P${row.courtPosition}` }),
+                el('span.lts__poslabel', { text: POSITION_LABELS[row.courtPosition] ?? '' }),
+            ]),
             el(
                 'span.lts__entries',
                 {},
