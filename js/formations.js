@@ -45,6 +45,18 @@ export const ROLE_POSITION = {
     MB2: 'MB',
 };
 
+/**
+ * Positions that exist to replace somebody else, so they never carry one of the
+ * six 6-2 roles.
+ *
+ * A libero comes on for a back-row middle or outside — that is the whole point
+ * of the position — and a defensive specialist does the same for a hitter.
+ * Reading the slot's role onto them labelled the libero "OH1" and then warned
+ * that she was an L where an OH was expected, which is the app misunderstanding
+ * the game rather than the lineup being wrong.
+ */
+export const SPECIALIST_POSITIONS = ['L', 'DS'];
+
 export const ROLE_LABEL = {
     S1: 'S1',
     S2: 'S2',
@@ -197,11 +209,23 @@ export function assignRoles(lineup = [], rotation = 1, playerLookup = () => unde
     for (let position = 1; position <= 6; position++) {
         const role = roles[slotAtPosition(position, rotation)];
         const playerId = lineup[position - 1] ?? null;
+
+        // The slot keeps its role whoever is standing in it, so the formation
+        // tables still know where to draw them.
         byRole[role] = playerId;
         if (!playerId) continue;
-        roleOf[playerId] = role;
 
         const player = playerLookup(playerId);
+
+        // A libero or defensive specialist is shown as what they are rather
+        // than as the hitter they replaced, and is never a mismatch.
+        if (SPECIALIST_POSITIONS.includes(player?.position)) {
+            roleOf[playerId] = player.position;
+            continue;
+        }
+
+        roleOf[playerId] = role;
+
         const expected = ROLE_POSITION[role];
         // An untagged player says nothing either way; only a stated position
         // that contradicts the slot is worth raising.

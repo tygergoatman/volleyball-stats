@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.15b** (`js/version.js`).
+Current version: **2026.08.15d** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 162 tests, all pure modules
+node --test "tests/*.test.js"                          # 167 tests, all pure modules
 ```
 
 **Run it in a browser before claiming anything works.** Every bug that reached the user was invisible
@@ -213,6 +213,46 @@ the button applies the delta from the current rotation so tapping around compose
 Because the map moves, the numbering convention does not have to be argued about — tap until the
 court matches the floor. Sets recorded before the fix hold whatever lineup was placed, which was
 being taken literally, so they are still self-consistent.
+
+## Pre-season review findings (2026.08.15c)
+
+A full end-to-end pass before the first week of play. What it confirmed, and the two real bugs it
+turned up — both invisible to unit tests, both found by driving a browser.
+
+**Fixed: a double-tap on a stat button recorded it twice.** `closeSheet` left the sheet in the DOM
+for its 180ms fade, and the button stayed live the whole time. One excited double-tap courtside meant
+two kills. The scrim now goes `pointer-events: none` the instant it starts closing, which covers
+every sheet in the app, not just the stat sheet.
+
+**Fixed: under `prefers-reduced-motion`, pressing a bubble made it jump.** A leftover rule set
+`transform: none` on `.bubble:active`, which since the coordinate-layout change is also what centres
+the bubble — so it shunted half a bubble down and right on every press. Keep the translate, drop only
+the scale. Anything setting `transform` on `.bubble` must preserve `translate(-50%, -50%)`.
+
+**Fixed in 15d: the libero was labelled with the role of the slot she took over, and warned about.**
+Roles belong to the rotation slot, which is right for hitters and wrong for the positions that exist
+to _replace_ someone. The libero came on for a back-row outside, inherited "OH1", and then tripped
+the 6-2 check — "L, expected OH" — every rally she was on. `SPECIALIST_POSITIONS` (`L`, `DS`) are now
+shown as themselves and never raise a mismatch. They still hold the slot, so the formation tables
+place them correctly; only the badge and the check changed. The mis-ordered-lineup warning it was
+built for still fires.
+
+Verified good, so do not re-litigate these without new evidence:
+
+- Win-by-two: no win at 25-24, banner at 26-24. Deciding set targets 15.
+- Libero replacements stay off the substitution count.
+- Log corrections re-attribute correctly and the score replays.
+- Deleting a set renumbers the rest from 1.
+- **Reload mid-set loses nothing** — the tab being evicted or the phone sleeping is survivable.
+- **Offline reload works and capture continues** — the gym case.
+- Backup wipe-and-restore round-trips exactly.
+- Share produces a real file; CSV export is correct and is _correctly disabled_ when there are no
+  player stats to export.
+- Storage: **9.3 KB per three-set match**. A 40-match season is ~0.93 MB with 14,400 events, against
+  a ~5 MB budget. Cold load 1.3s, tab switches ~200ms, season aggregation 438ms. No headroom concern.
+
+Known and accepted: double-tapping **+1 Us / +1 Them** does record two points, because two taps there
+are plausibly two points. Undo is the remedy.
 
 ## Deploying
 

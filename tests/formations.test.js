@@ -16,6 +16,7 @@ import {
     DEFAULT_SYSTEM,
     SERVING_ORDER_ROLES,
     SERVE_RECEIVE,
+    SPECIALIST_POSITIONS,
     assignRoles,
     formationLineup,
     formationPoints,
@@ -259,5 +260,62 @@ test('rotations 1 and 4 are the ones that do not switch after receiving', () => 
             (id) => rotational[id].x !== base[id].x || rotational[id].y !== base[id].y,
         );
         assert.ok(frontRowDiffers, `rotation ${rotation}: base and rotational differ, so the note matters`);
+    }
+});
+
+/* --------------------------------------------------- liberos and specialists */
+
+test('a libero is shown as L, not as the hitter she replaced', () => {
+    // The libero comes on for the back-row outside. She occupies that slot — so
+    // the formation tables still place her there — but she is a libero, and
+    // labelling her OH1 is simply wrong.
+    const lineup = ['s1', 'lib', 'mb1', 's2', 'oh2', 'mb2'];
+    const withLibero = (id) => (id === 'lib' ? { id: 'lib', number: '19', name: 'Hann', position: 'L' } : PLAYERS[id]);
+
+    const { byRole, roleOf, mismatches } = assignRoles(lineup, 1, withLibero);
+
+    assert.equal(roleOf.lib, 'L', 'the badge reads L');
+    assert.equal(byRole.OH1, 'lib', 'she still holds the slot, so base can place her');
+    assert.deepEqual(mismatches, [], 'a libero on court is not a broken lineup');
+});
+
+test('a libero raises no warning in any rotation or slot she can occupy', () => {
+    // She replaces back-row players, and which role that is changes every
+    // rotation. None of them should complain.
+    const libero = { id: 'lib', number: '19', position: 'L' };
+    const withLibero = (id) => (id === 'lib' ? libero : PLAYERS[id]);
+
+    for (let rotation = 1; rotation <= 6; rotation++) {
+        for (let slot = 0; slot < 6; slot++) {
+            const lineup = lineupForRotation(LINEUP, rotation).slice();
+            lineup[slot] = 'lib';
+            const { mismatches, roleOf } = assignRoles(lineup, rotation, withLibero);
+            assert.deepEqual(mismatches, [], `rotation ${rotation}, slot ${slot}: no warning`);
+            assert.equal(roleOf.lib, 'L', `rotation ${rotation}, slot ${slot}: labelled L`);
+        }
+    }
+});
+
+test('a defensive specialist is treated the same way', () => {
+    const lineup = ['s1', 'oh1', 'mb1', 's2', 'ds', 'mb2'];
+    const withDs = (id) => (id === 'ds' ? { id: 'ds', number: '11', position: 'DS' } : PLAYERS[id]);
+    const { roleOf, mismatches } = assignRoles(lineup, 1, withDs);
+    assert.equal(roleOf.ds, 'DS');
+    assert.deepEqual(mismatches, [], 'a DS in for a hitter is normal, not a mis-ordered lineup');
+});
+
+test('a genuinely mis-ordered lineup is still reported', () => {
+    // The check has to keep working for what it was built for.
+    const scrambled = ['s1', 'oh1', 's2', 'mb1', 'oh2', 'mb2'];
+    assert.equal(assignRoles(scrambled, 1, lookup).mismatches.length, 2);
+});
+
+test('the libero is still drawn on court in every formation', () => {
+    const lineup = ['s1', 'lib', 'mb1', 's2', 'oh2', 'mb2'];
+    const withLibero = (id) => (id === 'lib' ? { id: 'lib', number: '19', position: 'L' } : PLAYERS[id]);
+    for (const formation of ['rotation', 'base', 'receive']) {
+        const points = formationPoints({ lineup, rotation: 1, formation, playerLookup: withLibero });
+        assert.ok(points.lib, `${formation}: the libero has a place on court`);
+        assert.equal(Object.keys(points).length, 6, `${formation}: all six drawn`);
     }
 });

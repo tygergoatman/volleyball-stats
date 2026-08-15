@@ -150,6 +150,10 @@ Roles — S1, OH2, MB1 — are worked out from the serving order and shown on ea
 to type. A role belongs to the rotation slot rather than the person, so a substitute inherits the
 role of the spot they come into.
 
+Liberos and defensive specialists are the exception: they exist to replace somebody, so they are
+shown as **L** or **DS** rather than as the hitter whose spot they took, and they never trip the
+"this doesn't look like a 6-2" warning.
+
 **Switching view never changes anything legal.** The position number on each bubble and the serve
 ring always follow the player's real rotational position, so a formation can't hide an overlap or
 mislead you about who is serving. Tapping still records against the player.

@@ -103,6 +103,10 @@ export function closeSheet() {
     activeSheet = null;
     document.body.classList.remove('sheet-open');
     scrim.classList.remove('scrim--visible');
+    // Go inert immediately. The node lingers for the fade-out, and until this
+    // was added a second tap inside that window hit the same button again —
+    // which courtside meant one excited double-tap recording two kills.
+    scrim.style.pointerEvents = 'none';
     setTimeout(() => scrim.remove(), 180);
 }
 

@@ -377,23 +377,14 @@ button:disabled {
         0 3px 0 rgba(0, 0, 0, 0.35);
 }
 
-.bubble--subtarget {
-    border-color: var(--good);
-    animation: pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes pulse {
-    50% {
-        box-shadow: 0 0 0 6px color-mix(in srgb, var(--good) 28%, transparent);
-    }
-}
-
 @media (prefers-reduced-motion: reduce) {
-    .bubble--subtarget {
-        animation: none;
-    }
+    /*
+     * Drop the press scale but KEEP the centring translate. Bubbles are placed
+     * by coordinate and centred with a transform, so `transform: none` here
+     * shunted them half a bubble down and right the moment they were pressed.
+     */
     .bubble:active {
-        transform: none;
+        transform: translate(-50%, -50%);
     }
 }
 
