@@ -18,7 +18,74 @@ import {
     positionOf,
     setWinner,
 } from '../model.js';
+import {
+    DEFAULT_SYSTEM,
+    FORMATIONS,
+    SYSTEMS,
+    assignRoles,
+    formationPoints,
+    keepsFrontRowOnReceive,
+} from '../formations.js';
 import { el, mount, openSheet, closeSheet, toast, buzz, confirmDialog } from './dom.js';
+
+/**
+ * Which formation the court is drawing. Base is the default because that is
+ * where play actually happens and therefore where stats get tapped; Rotation is
+ * for checking the lineup against the referee.
+ */
+let formation = 'base';
+
+/**
+ * Positions captured just before a formation switch, so the new bubbles can be
+ * animated from where the old ones were.
+ *
+ * The app re-renders wholesale — `mount` clears and rebuilds — so every bubble
+ * is a fresh node with no previous position, and a plain CSS transition on
+ * left/top has nothing to animate from. This is the FLIP approach instead:
+ * measure, re-render, offset each bubble back to where it was, then let it
+ * travel to its new home.
+ */
+let flipFrom = null;
+
+function centresOfBubbles() {
+    const centres = new Map();
+    for (const node of document.querySelectorAll('.court__grid .bubble[data-player]')) {
+        const rect = node.getBoundingClientRect();
+        centres.set(node.dataset.player, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+    }
+    return centres;
+}
+
+/** Switch view, remembering where everyone was standing. */
+function setFormation(next, store) {
+    if (next === formation) return;
+    flipFrom = centresOfBubbles();
+    formation = next;
+    store.commit();
+}
+
+/** Run after the court re-renders: send each bubble back, then let it move. */
+function runFlip(from) {
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) return;
+
+    for (const node of document.querySelectorAll('.court__grid .bubble[data-player]')) {
+        const previous = from.get(node.dataset.player);
+        if (!previous) continue;
+        const rect = node.getBoundingClientRect();
+        const dx = previous.x - (rect.left + rect.width / 2);
+        const dy = previous.y - (rect.top + rect.height / 2);
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+
+        node.style.transition = 'none';
+        node.style.transform = `translate(-50%, -50%) translate(${dx}px, ${dy}px)`;
+        void node.offsetWidth; // commit that position before animating away from it
+        node.style.transition = '';
+        node.classList.add('bubble--flip');
+        node.style.transform = '';
+        node.addEventListener('transitionend', () => node.classList.remove('bubble--flip'), { once: true });
+    }
+}
 
 /** Player currently selected for a substitution, if any. */
 
@@ -34,11 +101,17 @@ export function renderCourt(root, store, actions) {
     mount(
         root,
         scoreboard(store, live, set),
-        courtMap(store, live),
+        courtMap(store, live, set),
         benchStrip(store, live, actions),
         recentStrip(store, live),
         actionBar(store, live, set, actions),
     );
+
+    if (flipFrom) {
+        const from = flipFrom;
+        flipFrom = null;
+        requestAnimationFrame(() => runFlip(from));
+    }
     return root;
 }
 
@@ -126,6 +199,7 @@ function setupSetPanel(store, actions) {
         startingServer: previous ? (previous.startingServer === 'us' ? 'them' : 'us') : 'us',
         startingRotation: 1,
         format: match.format ?? DEFAULT_FORMAT,
+        system: previous?.system ?? match.sets.at(-1)?.system ?? DEFAULT_SYSTEM,
         lineup: [null, null, null, null, null, null],
     };
 
@@ -188,6 +262,21 @@ function setupSetPanel(store, actions) {
                     }),
                 ]),
             ]),
+
+            SYSTEMS.length > 1 &&
+                el('div.field', {}, [
+                    el('span.field__label', { text: 'Offense' }),
+                    el(
+                        'div.segmented',
+                        {},
+                        SYSTEMS.map((system) =>
+                            toggleButton(system.label, draft.system === system.key, () => {
+                                draft.system = system.key;
+                                rerender();
+                            }),
+                        ),
+                    ),
+                ]),
 
             el('div.field', {}, [
                 el('span.field__label', { text: 'Starting rotation' }),
@@ -373,22 +462,64 @@ function scoreboard(store, live, set) {
 
 /* -------------------------------------------------------------- court map */
 
-function courtMap(store, live) {
+function courtMap(store, live, set) {
+    const system = set?.system ?? DEFAULT_SYSTEM;
+    const lookup = (id) => store.player(id);
+    const points = formationPoints({
+        lineup: live.lineup,
+        rotation: live.rotation,
+        formation,
+        system,
+        playerLookup: lookup,
+    });
+    const { roleOf, mismatches } = assignRoles(live.lineup, live.rotation, lookup, system);
+    const current = FORMATIONS.find((f) => f.key === formation) ?? FORMATIONS[0];
+    const noSwitch = formation === 'receive' && keepsFrontRowOnReceive(live.rotation, system);
+
     return el('section.court', {}, [
-        el('div.court__net', { text: 'NET' }),
+        // The net doubles as the label for which view is on screen.
+        el('div.court__net', { text: `NET · ${current.label.toUpperCase()}` }),
         el(
             'div.court__grid',
-            {},
-            COURT_GRID.map((position) => bubble(store, live, position)),
+            { class: formation === 'receive' ? 'court__grid--receive' : '' },
+            // Drawn in a stable order — by rotational position, never by where
+            // they currently stand — so each bubble is the same DOM node across
+            // views and CSS can carry it from one formation to the next.
+            live.lineup.map((_, index) => bubble(store, live, index + 1, points, roleOf)),
         ),
+        el(
+            'div.segmented.segmented--sm',
+            {},
+            FORMATIONS.map((option) =>
+                toggleButton(option.label, formation === option.key, () => setFormation(option.key, store)),
+            ),
+        ),
+        el('p.court__hint', { text: current.note }),
+        noSwitch &&
+            el('p.court__hint.court__hint--note', {
+                text: `Rotation ${live.rotation}: the front row stays where it receives — outside right, opposite outside. Switch to Rotation to see where they attack from.`,
+            }),
+        mismatches.length > 0 &&
+            el('p.court__hint.court__hint--warn', {
+                text: `Lineup does not look like a ${system}: ${mismatches
+                    .map(
+                        (m) =>
+                            `${playerLabel(store.player(m.playerId))} is ${m.actual}, expected ${m.expected} at ${m.role}`,
+                    )
+                    .join('; ')}.`,
+            }),
     ]);
 }
 
-function bubble(store, live, position) {
-    const playerId = live.lineup[position - 1];
+function bubble(store, live, rotationalPosition, points, roleOf) {
+    const playerId = live.lineup[rotationalPosition - 1];
     const player = playerId ? store.player(playerId) : null;
-    const isServer = position === 1 && live.serving === 'us';
-    const isFront = FRONT_ROW.includes(position);
+    // Everything legal stays rotational: which position a player occupies, and
+    // therefore who serves, does not change because the court is drawn
+    // differently. Only where the bubble sits moves.
+    const point = (playerId && points[playerId]) || { x: 0.5, y: 0.5 };
+    const isServer = live.serving === 'us' && rotationalPosition === 1;
+    const isFront = FRONT_ROW.includes(rotationalPosition);
 
     const classes = ['bubble'];
     classes.push(isFront ? 'bubble--front' : 'bubble--back');
@@ -400,6 +531,10 @@ function bubble(store, live, position) {
         {
             type: 'button',
             class: classes.join(' '),
+            // Deeper players sit in front, so an overlapped bubble still has
+            // its own edge to tap.
+            style: `left:${point.x * 100}%;top:${point.y * 100}%;z-index:${Math.round(point.y * 100)}`,
+            dataset: player ? { player: player.id } : {},
             disabled: !player,
             onClick: () => {
                 if (!player) return;
@@ -407,12 +542,15 @@ function bubble(store, live, position) {
             },
         },
         [
-            el('span.bubble__pos', { text: String(position) }),
+            el('span.bubble__pos', { text: String(rotationalPosition) }),
             isServer && el('span.bubble__serve', { text: '🏐', title: 'Serving' }),
             el('span.bubble__num', { text: player ? `#${player.number}` : '—' }),
             (player ? player.name : 'empty') && el('span.bubble__name', { text: player ? player.name : 'empty' }),
-            // Setter and libero are the two worth seeing mid-rally.
+            player && roleOf?.[player.id] && el('span.bubble__role', { text: roleOf[player.id] }),
+            // Setter and libero are the two worth seeing mid-rally — but the
+            // role already says "S1", so the badge is only needed without one.
             player &&
+                !roleOf?.[player.id] &&
                 HIGHLIGHTED_POSITIONS.includes(player.position) &&
                 el('span.bubble__tag', { text: player.position }),
         ],

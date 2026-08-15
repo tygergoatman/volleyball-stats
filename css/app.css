@@ -299,10 +299,20 @@ button:disabled {
     border-radius: var(--radius) var(--radius) 0 0;
 }
 
+/*
+ * Bubbles are placed by coordinate rather than laid out in a grid, so switching
+ * formation moves them instead of redrawing them — which is what turns the
+ * transition arrows on the paper sheets into something you watch.
+ */
 .court__grid {
+    position: relative;
+    aspect-ratio: 3 / 2.15;
+}
+
+.court--setup .court__grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    aspect-ratio: auto;
 }
 
 .court__hint {
@@ -314,11 +324,10 @@ button:disabled {
 }
 
 .bubble {
-    position: relative;
+    position: absolute;
     aspect-ratio: 1;
-    width: 100%;
-    max-width: 120px;
-    justify-self: center;
+    width: 30%;
+    transform: translate(-50%, -50%);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -334,8 +343,17 @@ button:disabled {
     transition: transform 90ms ease;
 }
 
+/*
+ * Applied for one journey when the formation changes. Later in the sheet than
+ * `.bubble`, so it wins the transition without needing !important, and removed
+ * on transitionend so press feedback goes back to being snappy.
+ */
+.bubble--flip {
+    transition: transform 0.5s cubic-bezier(0.34, 0.03, 0.2, 1);
+}
+
 .bubble:active {
-    transform: scale(0.94);
+    transform: translate(-50%, -50%) scale(0.94);
 }
 
 .bubble--back {
@@ -1763,4 +1781,54 @@ button:disabled {
 /* Serving *and* the libero's rotation: keep the triangle, keep the amber. */
 .lts__order--serving.lts__order--liberoserve {
     color: var(--serve);
+}
+
+/* ------------------------------------------------------- court formations */
+
+.segmented--sm .seg {
+    min-height: 34px;
+    font-size: 12px;
+}
+
+.court__hint {
+    margin: 6px 0 0;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+}
+
+.court__hint--warn {
+    color: var(--warn);
+}
+
+/*
+ * The role a player is filling in this rotation — S1, MB2 and so on. In normal
+ * flow rather than a corner: the bubble is a circle, and anything absolutely
+ * placed near an edge gets clipped by the border radius.
+ */
+.bubble__role {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    opacity: 0.8;
+}
+
+/* A formation switch is information, not decoration — but honour the setting. */
+@media (prefers-reduced-motion: reduce) {
+    .bubble {
+        transition: none;
+    }
+}
+
+.court__hint--note {
+    color: var(--set);
+}
+
+/*
+ * Serve-receive packs players into passing lanes rather than the six cells, so
+ * bubbles overlap. Shrink them a little and stack deeper players in front, which
+ * both matches the sheet and leaves more of each one tappable.
+ */
+.court__grid--receive .bubble {
+    width: 24%;
 }

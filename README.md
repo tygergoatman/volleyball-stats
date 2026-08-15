@@ -132,6 +132,39 @@ Per-set, per-match and season stats can also be exported as CSV from the Stats t
 
 ## How capture works
 
+### Formations
+
+The court draws three views of the same six players, switched with the buttons under it. The label
+in the net strip says which one you are looking at.
+
+| View          | What it shows                                                                            |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| **Base**      | Where each position plays once the ball is live. The default, and where stats get tapped |
+| **Rotation**  | The legal rotational positions — what the referee sees at the whistle                    |
+| **Serve Rcv** | The passing formation. Reference — bubbles overlap here, as on the paper sheet           |
+
+Base comes from your 6-2 rotation sheets: hitters switch sides, and whichever setter is back row
+releases to position 1 while the other plays opposite at position 2.
+
+Roles — S1, OH2, MB1 — are worked out from the serving order and shown on each bubble. Nothing extra
+to type. A role belongs to the rotation slot rather than the person, so a substitute inherits the
+role of the spot they come into.
+
+**Switching view never changes anything legal.** The position number on each bubble and the serve
+ring always follow the player's real rotational position, so a formation can't hide an overlap or
+mislead you about who is serving. Tapping still records against the player.
+
+**Switching view animates the players between formations.** That is deliberate: your rotation sheets
+draw green arrows for the movement after the pass, and on a phone-sized court watching each player
+travel reads better than arrows drawn over the top. Motion is skipped if your phone is set to reduce
+it.
+
+In rotations 1 and 4 your sheets leave the front row where it receives — outside stays right,
+opposite stays outside. Those rotations say so under the court. That arrangement is the **Rotation**
+view, so switching there shows where they attack from.
+
+Pick the offense at set setup. Only 6-2 is built; the picker appears once there is more than one.
+
 ### The court
 
 Bubbles are laid out in standard volleyball positions, with the net along the top:

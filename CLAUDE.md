@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.14b** (`js/version.js`).
+Current version: **2026.08.15b** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 144 tests, all pure modules
+node --test "tests/*.test.js"                          # 162 tests, all pure modules
 ```
 
 **Run it in a browser before claiming anything works.** Every bug that reached the user was invisible
@@ -41,7 +41,7 @@ is published; offline it serves the last copy it saw, which is what matters in a
 `controllerchange` the page reloads itself once. `APP_VERSION` is shown on the Roster tab purely so
 "is this phone running what I just published?" has a visible answer; nothing depends on it.
 
-**Pure modules have no DOM:** `model.js`, `stats.js`, `libero.js`, `store.js`. That is what makes
+**Pure modules have no DOM:** `model.js`, `stats.js`, `libero.js`, `formations.js`, `store.js`. That is what makes
 them testable. Keep it that way.
 
 ## Privacy — the constraint that shapes the roster
@@ -136,6 +136,69 @@ than a bare `L`, since `L` alone would be ambiguous.
 
 Sets recorded before `kind` existed fall back to "was a libero involved", which gets old data close
 but not exact.
+
+## Formations (Court tab)
+
+Three views of the same six players: **Rotation** (legal rotational positions),
+**Base** (where they play once the ball is live), and **Serve Rcv** (the passing formation). Base is the
+default because that is where play happens and therefore where stats get tapped; the owner uses
+Rotation to check the lineup against the referee.
+
+`js/formations.js` holds the tables, transcribed from the owner's 6-2 rotation sheets. The Rotation
+view needed no data — it was verified against the sheets position for position and is the lineup the
+app already had. Label positions were pulled out of the PDF with `pdftotext -bbox` rather than read
+off a picture, which is the only reason the transcription can be trusted.
+
+**Roles belong to the rotation slot, not the person.** Substitute for the second middle and the
+substitute _is_ MB2 while they are on. So `assignRoles` reads the _current_ lineup, never
+`startingLineup` — an earlier version used the starting lineup and left roles attached to players
+who had been subbed off. Court position `p` holds canonical slot `(p - 1 + rotation - 1) mod 6`,
+which works because rotation N means the Nth player of the team's order is serving.
+
+**Nothing legal moves when the view does.** The bubble's position number and the serve indicator are
+always the player's _rotational_ position, so a formation view can never hide an overlap or mislead
+about who is serving. Tapping a bubble records against the player, so capture is unaffected.
+
+The base tables are guarded structurally rather than by re-reading the sheets: every rotation places
+all six roles exactly once, a setter is always at position 1 with the other setter at position 2, and
+front row always holds one middle, one outside and one setter. A fat-fingered cell breaks one of
+those.
+
+Where players carry a roster position, a lineup that contradicts the 6-2 order is reported on the
+court rather than silently drawn.
+
+**Serve-receive is not a permutation** — it is a spatial formation with passers spread across the
+court, so it needs coordinates per role, not position slots. The owner has confirmed overlapping and
+off-grid bubbles are fine there, and that it is reference-only. Deliberately deferred.
+
+### Serve-receive, and the animation
+
+Serve-receive is **not** a permutation of the six positions — it is a spatial formation, so
+`SERVE_RECEIVE` holds normalised court coordinates per role (`x` 0 left to 1 right, `y` 0 net to 1
+end line). Pulled from the PDF with `pdftotext -bbox` and normalised per panel, not estimated by eye.
+
+The sheets draw everyone between the attack line and the end line, with the whole front court empty.
+Reproduced literally that left the app's court half empty and stacked players on top of each other,
+so `spreadDepth` stretches the drawn band over the playable height. Relative depth is exact; only the
+scale changes. Overlap is expected and fine here — the owner confirmed it — so receive bubbles are
+smaller and z-ordered by depth, leaving each an edge to tap.
+
+**The transition arrows on the sheets are not drawn.** Switching view animates the bubbles between
+formations instead, which carries the same information without covering a phone-sized court in
+arrows.
+
+That animation is **FLIP, not a CSS transition on `left`/`top`.** The app re-renders wholesale —
+`mount` clears and rebuilds — so every bubble is a fresh node with no previous position for a plain
+transition to animate from. `setFormation` measures the old centres, `runFlip` offsets each new
+bubble back there and lets it travel. A `.bubble--flip` class carries the longer easing and is
+removed on `transitionend` so press feedback stays snappy. Skipped under `prefers-reduced-motion`.
+
+Watch for: `.bubble` declared `transition` twice at one point and the later one silently won. If
+motion stops working, check for a second declaration before anything else.
+
+**Rotations 1 and 4 do not switch the front row after receiving** — the sheets' note, and what their
+arrows show. No extra table was needed: not switching _is_ the rotational arrangement, so the
+destination is the Rotation view the app already draws. Those rotations show a note saying so.
 
 ## Starting rotation
 

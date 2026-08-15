@@ -11,6 +11,7 @@
  */
 
 import { DEFAULT_FORMAT, SCHEMA_VERSION, computeSetState, isLibero, targetForSet } from './model.js';
+import { DEFAULT_SYSTEM } from './formations.js';
 
 const STORAGE_KEY = 'volleyball-stats.v1';
 
@@ -637,7 +638,8 @@ export class Store {
      * Start a new set in the active match.
      *
      * @param {{startingServer: 'us'|'them', startingRotation: number,
-     *          startingLineup: Array<string|null>, format?: number}} config
+     *          startingLineup: Array<string|null>, format?: number,
+     *          system?: string}} config
      */
     startSet(config) {
         return this.update((state) => {
@@ -651,6 +653,8 @@ export class Store {
                 startingServer: config.startingServer ?? 'us',
                 startingRotation: config.startingRotation ?? 1,
                 startingLineup: (config.startingLineup ?? []).slice(0, 6),
+                // Which offence, so the court can draw where each role plays.
+                system: config.system ?? DEFAULT_SYSTEM,
                 // The deciding set is played to 15, so the target follows the format.
                 target: config.target ?? targetForSet(number, match.format ?? DEFAULT_FORMAT),
                 events: [],

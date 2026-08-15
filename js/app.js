@@ -162,6 +162,7 @@ const actions = {
             startingRotation: draft.startingRotation,
             startingLineup: draft.lineup,
             format: draft.format,
+            system: draft.system,
         });
         resetCourtInteraction();
         toast('Set started — good luck');
