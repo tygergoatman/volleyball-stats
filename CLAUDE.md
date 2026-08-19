@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.15d** (`js/version.js`).
+Current version: **2026.08.19b** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 167 tests, all pure modules
+node --test "tests/*.test.js"                          # 218 tests, all pure modules
 ```
 
 **Run it in a browser before claiming anything works.** Every bug that reached the user was invisible
@@ -41,8 +41,15 @@ is published; offline it serves the last copy it saw, which is what matters in a
 `controllerchange` the page reloads itself once. `APP_VERSION` is shown on the Roster tab purely so
 "is this phone running what I just published?" has a visible answer; nothing depends on it.
 
-**Pure modules have no DOM:** `model.js`, `stats.js`, `libero.js`, `formations.js`, `store.js`. That is what makes
+**Pure modules have no DOM:** `model.js`, `stats.js`, `libero.js`, `formations.js`, `plan.js`, `store.js`. That is what makes
 them testable. Keep it that way.
+
+**Add every new module to `SHELL` in `sw.js` in the same change that creates it.** `libero.js`,
+`formations.js` and `ui/subs.js` were each shipped without it and nothing caught them: the fetch
+handler caches what it serves, so one online visit papers over the omission completely. The failure
+only bites an install that never ran online — and since `store.js` imports `formations.js`, that
+failure is the whole app, not the one tab. `tests/sw.test.js` now compares the list against the files
+on disk in both directions.
 
 ## Privacy — the constraint that shapes the roster
 
@@ -81,8 +88,59 @@ Getting these wrong silently produced wrong statistics, which is worse than a cr
 - **Every stat row ends on its one point-conceding button**, so all the red sits down the right-hand
   edge. A test enforces this — it is what makes the sheet readable at a glance mid-rally.
 - Hitting percentage is standard `(K − 0) / attempts` and can be negative.
-- Setter and libero come from `position` (`S` / `L`) only. There were once separate boolean flags;
+- Setter and libero come from `positions` (`S` / `L`) only. There were once separate boolean flags;
   two fields saying the same thing could disagree, so they were collapsed.
+
+## Positions are a list (schema v4)
+
+`player.positions` is an array, because players go all the way around — setter in the back, outside
+in the front — and a single string could not say so. It is stored **sorted by
+`POSITION_PRECEDENCE`** (`L, S, DS, OPP, MB, OH`), so `['S','OH']` and `['OH','S']` are the same
+record and tap order never leaks into storage.
+
+`positions[0]` is the primary where there is no court to consult — the roster list, the bench — and
+the ordering is what makes that meaningful: the **distinctive** role leads.
+
+**On court, the row decides instead.** `primaryPosition(player, row)` answers for where she is
+standing right now, because this team's 6-2 has **setters setting from the back row only**: an S/OH
+who has rotated to the front is hitting outside and should read as an OH, not a setter. So the same
+player is setter-orange in the back and hitter-blue in the front, and the `S` badge appears only in
+the back. `FRONT_ROW_POSITIONS` / `BACK_ROW_POSITIONS` hold the split, and a test asserts every
+roster position sits in exactly one of them so none can silently drop out of the rule.
+
+A player with nothing playable from the row she is in **keeps her own position** rather than being
+blanked — a pure setter in the front row really is a setter, she just cannot set from there, and a
+front-row libero is still the libero. Saying less than the truth would not help; the 6-2 and
+front-row-libero checks are what flag an odd lineup.
+
+Where several positions do and do not get shown:
+
+- **Roster list** — one tag per position, each in its own colour. There is room.
+- **Court bubble** — one, and only the highlighted `S`/`L`. A bubble has room for a fact, not a list.
+- **Bench chip, picker row, stat sheet subtitle** — the joined list via `positionsLabel()`.
+
+**`L` is exclusive, enforced in the picker.** Within a set you either are the designated libero or
+you are not — a libero may not play front row or attack above the net, so "L and OH" describes no
+legal player. Tapping `L` clears the rest and vice versa. It also keeps `isSpecialist` unambiguous.
+
+**`isSpecialist` is "specialist and nothing else", not "specialist somewhere in the list."** A pure
+L or DS never carries a 6-2 role, so their own tag wins. A player tagged OH **and** DS is a hitter
+who also covers back row: she does rotate through the six roles, and labelling her "DS" while she
+stands in an outside slot would hide what the court exists to show.
+
+**This removed a class of false warning.** The 6-2 check now asks whether the slot's position is
+_among_ the player's, so a swing player in an outside slot stops tripping it every single rotation.
+A test walks all six rotations to pin that. The message names the whole list — "is S/OH, expected
+MB" — because a warning you cannot act on is noise.
+
+Two migration traps, both live-tested:
+
+- The v1/v2 booleans are read **only when there is no `position`**. Promoting them to a second entry
+  would turn `position: 'OH', isSetter: true` — a record with a stale flag — into a claim that she
+  plays both, inventing a fact from an old bug.
+- `playerOverrides` are raw change objects replayed over players after **every** roster refresh, so a
+  v3 override carrying `position` would keep re-attaching the old key long after the players
+  themselves migrated. `migrate()` converts the overrides too.
 
 ## The libero tracking sheet (Subs tab)
 
@@ -198,7 +256,27 @@ motion stops working, check for a second declaration before anything else.
 
 **Rotations 1 and 4 do not switch the front row after receiving** — the sheets' note, and what their
 arrows show. No extra table was needed: not switching _is_ the rotational arrangement, so the
-destination is the Rotation view the app already draws. Those rotations show a note saying so.
+destination is an arrangement the app already draws.
+
+That is now a **Receive / After pass** toggle inside the serve-receive view rather than a note telling
+the coach to go and look at another view. `afterReceiveFormation(rotation)` resolves to `base` for
+rotations 2, 3, 5 and 6 and to `rotation` for 1 and 4; `formationPoints` recurses into it. Resolving
+rather than storing a fourth table keeps it honest — correct Base and this follows automatically, and
+a test asserts it matches Base everywhere except 1 and 4.
+
+It is a sub-toggle, not a fourth button on the main bar, for two reasons: four buttons crowd a 412px
+court, and "after the pass" is a stage of serve-receive rather than a peer of it. Serve Rcv stays lit
+on the main bar for both stages.
+
+**The other alternate is out of scope, not pending.** The sheets carry a second note — "have the OH1
+stay back for SR with S1 releasing from backrow" (OH2/S2 in rotation 4) — which is a genuinely
+different _receive_ formation rather than a different destination. **This team does not play it: they
+do not release the setter from the back on serve receive.** So it is declined, not deferred. Do not
+build it, and do not raise it again as a gap; the note on the sheet is an option their programme does
+not use.
+
+It was also prose only — the sheets never draw it — so the coordinates would have had to be invented
+rather than transcribed, unlike every other entry in `SERVE_RECEIVE`.
 
 ## Starting rotation
 
@@ -214,6 +292,127 @@ Because the map moves, the numbering convention does not have to be argued about
 court matches the floor. Sets recorded before the fix hold whatever lineup was placed, which was
 being taken literally, so they are still self-consistent.
 
+## Court colours by position
+
+Bubbles are filled by the player's roster position so the setter, libero and DS are identifiable at a
+glance while capturing. `POSITION_COLORS` in `model.js` holds the defaults; `state.positionColors`
+holds anything the coach overrides from Roster → Court colours.
+
+**Hitters share one colour by default.** The useful signal is "hitter / setter / libero / DS", not six
+hues competing on one court. Every position is still individually overridable.
+
+**Untagged players keep the original blue**, so a roster with no positions tagged looks exactly as it
+did before. The feature is effectively opt-in by tagging.
+
+**Hue is position, lightness is row.** Back-row bubbles use `darkenHex`, so colouring by position does
+not cost the front/back read the shading used to carry.
+
+**The palette is contrast-checked and a test enforces it.** Every default is at least 3.0:1 against
+the white bold text on a bubble, at full strength and darkened. Amber (`#f59e0b`, 2.15) and light teal
+(`#14b8a6`, 2.49) were the obvious picks and both failed — do not swap one in without re-running
+`tests/model.test.js`. The editor offers a fixed swatch set for the same reason; a free colour picker
+would let an illegible fill through.
+
+The colour comes from the player's **primary** position — `positions[0]`, which the canonical sort
+makes the most distinctive one they play. See "Positions are a list" above.
+
+**A bug worth remembering:** the first cut computed the fill _before_ `isFront` was declared in
+`bubble()`. Temporal dead zone, the whole court render threw, and all 167 unit tests still passed.
+Declaration order inside `bubble()` matters, and this is another entry in the "run it in a browser"
+column.
+
+## Court tab screen order
+
+`renderCourt` stacks `scoreboard, courtMap, benchStrip, actionBar, recentStrip`. **Frequency decides
+vertical order** — the action bar sits above the history because that is the rule, not because of
+where it happened to land.
+
+After game one the owner reported reaching for **+1 Us / +1 Them** constantly when play outran the
+stat detail, and having to scroll past the history to get to them. The history is only read when
+undoing an entry or two. So the most-tapped controls moved up and the least-read panel moved down.
+Anything added to this screen later gets placed by the same test: how often is it tapped, not how
+important it feels.
+
+One consequence to keep in mind when adding anything here: **the stat sheet's buttons overlay this
+strip**, so whatever sits at the bottom of the court screen is what a stray second tap would hit as a
+sheet closes. With Undo now in that band, that mattered — see the double-tap entry in the review
+findings for how `closeSheet` handles it.
+
+## The game plan (Subs tab, prompted on Court)
+
+Planned substitutions, written the way the coach writes them on paper —
+`L > 19, 8 > 4, 4 > 8`, read as **in > out**. The screen uses that order on purpose.
+
+Two shapes, deliberately not one list, because the coach's two examples are two different things:
+
+- **One standing libero pairing** (`{liberoId, replacesId}`). Not keyed to a rotation: what triggers
+  it is the player crossing between rows. One line of input covers all six rotations and both
+  directions — libero on when the player she replaces is in the back row, off when the slot reaches
+  the front.
+- **A rotation-keyed list** of `{rotation, inId, outId}`. Prompted as the rotation counter reaches
+  that number, which is exactly when the ball is dead and a sub is legal.
+
+**Returns are ordinary rows, never inferred.** `8 > 4` and `4 > 8` are two entries. Inferring the
+return means guessing _when_ the player should come back, and a wrong guess prompts at the wrong
+moment — worse than not prompting.
+
+### The rule that holds it together: nothing records that a sub happened
+
+Whether to prompt is derived — the player going out is on court, the player coming in is not. That
+one check buys all of:
+
+- rotating past the same rotation twice in a set does not re-offer a sub already made
+- a new set re-arms everything with no reset step
+- undoing a sub brings its prompt back, correctly
+
+`tests/plan.test.js` pins each of those. **Do not add an `applied` flag**; it would have to be kept
+in step with the event list by hand, and that is the class of bug event sourcing exists to avoid.
+
+The one piece of state is which prompts have been _waved away_, and it is session-only, in
+`court.js` beside the chosen formation. A dismissal lasts while the team stands in that rotation of
+that set: rotate away and back and the offer returns, because that is a fresh chance — but it will
+not re-ask every rally in between.
+
+### Other decisions
+
+- **Stored per team** (`state.plans[teamId]`), reused all season. It is _input_, like the roster, so
+  storing it does not break "everything is derived", which is about score, rotation and lineup.
+- **Never auto-applies.** Deviating from the plan is normal coaching, and a sub recorded that did not
+  happen is worse than one missed.
+- **The live sheet beats the plan for who comes back.** If the libero went in for somebody other than
+  the planned player, the return prompt names whoever she _actually_ replaced — sending the planned
+  one back would put two players in one slot.
+- **Stale rows are shown greyed, not dropped.** A plan outlives roster changes; whether a row should
+  go is the coach's call.
+- **The panel opens on the team in context**, which is the one picked on the Roster tab (see below).
+  It keeps a picker of its own for the weeks somebody runs two teams, shown only while no match is
+  open — once one is running the team is settled by the match, and offering a different one here
+  would just be a way to edit the wrong plan.
+- Libero replacements are unlimited, so the "costs N of 15" note counts scheduled subs only — the
+  same rule the tracking sheet enforces.
+
+## The team in context
+
+`state.activeTeamId` is the app's answer to "whose roster, whose plan, whose next match", and it is
+set by **picking a team on the Roster tab**. One coach, one team for most of a season: choosing JV
+there _is_ the act of saying "JV is the team I am working with", so it carries to the new-match sheet
+and the plan panel rather than each screen guessing.
+
+Before this it was only ever set by creating or opening a match, so until the first match of a season
+it fell back to the first team in `roster.json` — for this program, MS. The visible symptom was the
+plan panel opening on MS with an empty roster and a greyed-out Libero button, which is how it was
+found; the new-match sheet had the same wrong default more quietly.
+
+Two deliberate limits:
+
+- **Showing everyone, or "No team", leaves the default alone.** Neither is a team, and clearing a
+  filter to look at the whole program is not a decision about who you coach.
+- **A running match still wins.** `activeTeam` returns the match's team while one is open, so picking
+  another team on the Roster tab cannot redirect a match in progress.
+
+The Roster tab opens filtered to that team, once per session, so it comes back where it was left.
+After that, clearing the filter sticks for as long as the tab is in use.
+
 ## Pre-season review findings (2026.08.15c)
 
 A full end-to-end pass before the first week of play. What it confirmed, and the two real bugs it
@@ -221,8 +420,21 @@ turned up — both invisible to unit tests, both found by driving a browser.
 
 **Fixed: a double-tap on a stat button recorded it twice.** `closeSheet` left the sheet in the DOM
 for its 180ms fade, and the button stayed live the whole time. One excited double-tap courtside meant
-two kills. The scrim now goes `pointer-events: none` the instant it starts closing, which covers
-every sheet in the app, not just the stat sheet.
+two kills.
+
+The first fix was to put `pointer-events: none` on the whole scrim the instant it starts closing, and
+that was half right — it stopped the double record and opened a worse hole. An inert scrim does not
+swallow the second tap, it lets it **fall through** to whatever sits underneath, and the sheet's stat
+buttons sit exactly where the action bar is. After the history moved (2026.08.16c) that meant the
+second tap landed on **Undo** and silently deleted the kill the first tap had just recorded: the score
+did not move, no toast, nothing in the history. It only surfaced because `e2e-ops.mjs` asserts a delta
+of exactly 1.
+
+The shape that is actually correct, and now in `closeSheet`: **the panel goes inert, the scrim stays
+live.** The scrim is `position: fixed; inset: 0`, so for the length of the fade it absorbs the second
+tap and does nothing with it — its own handler is `closeSheet`, which no-ops once `activeSheet` is
+null. Neither the button just tapped nor the page beneath can be reached. Do not "simplify" this back
+to a single `pointer-events` toggle on the scrim; each half is there for a different bug.
 
 **Fixed: under `prefers-reduced-motion`, pressing a bubble made it jump.** A leftover rule set
 `transform: none` on `.bubble:active`, which since the coordinate-layout change is also what centres
@@ -265,13 +477,31 @@ file, the old one stays in the repo and keeps being served. Flag which files to 
 
 ## Open work
 
-### 1. Floor captain — the `c` (spec known, deliberately not built)
+### 1. Capture flow: stat-first as well as player-first (from game one)
+
+Today is tap player → tap stat. In serve-receive the owner knows it is a **pass** before they know
+who touched it, so the first tap is the one they cannot make yet. Same two taps, wrong order.
+
+The shape that probably fits: a persistent pass row on the court — `3 2 1 .5 D 0` — where tapping a
+rating _arms_ it and the next player tap records it. The win is not fewer taps, it is that the first
+tap can happen **while the serve is in the air**, and there is no sheet to open and close. Keep the
+existing player-first flow untouched; this is a second route in, not a replacement.
+
+Design cautions, learned from the substitution arming that used to live on this screen:
+
+- An armed stat must be loud and must auto-disarm — a forgotten armed rating silently mis-records the
+  next tap, which is worse than a slow tap.
+- Do not arm on the stat _sheet_; that is the flow this exists to skip.
+- Serve-receive is the concrete case. Resist generalising to all five stat groups until it is proven,
+  or the court fills with buttons and the fast path gets slower.
+
+### 2. Floor captain — the `c` (spec known, deliberately not built)
 
 `L: 19c` — the `c` marks the **floor captain**, who must be on the floor at all times or have
 another player designated when substituted out. Owner's call: the official book captures this, so
 the app does not need to. Do not build it without being asked.
 
-### 2. Multi-device merge (planned, deliberately not built)
+### 3. Multi-device merge (planned, deliberately not built)
 
 Match files merge at match level: `mergeJson` adds matches the device does not have and skips ones it
 does. Event-level auto-merge is a trap — there is no shared event identity, so it double-counts or
@@ -282,7 +512,7 @@ proves annoying in practice. Currently on hold — the owner is not sure other c
 Note `mergeJson` does **not** update names for players the receiving device already has, so a shared
 file is not a way to distribute names.
 
-### 3. Known asymmetry
+### 4. Known asymmetry
 
 If players are ever put back into `roster.json`, deleting one in the app does not stick — the next
 online load re-adds them. Teams do not have this problem (`hiddenTeamIds` remembers a removal).

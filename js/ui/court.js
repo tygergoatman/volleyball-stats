@@ -6,8 +6,12 @@ import {
     FRONT_ROW,
     HIGHLIGHTED_POSITIONS,
     MATCH_FORMATS,
+    colorForPlayer,
+    darkenHex,
     playerLabel,
     POSITION_LABELS,
+    primaryPosition,
+    positionsLabel,
     rotateLineupBy,
     STAT_GROUPS,
     STAT_BY_CODE,
@@ -21,11 +25,15 @@ import {
 import {
     DEFAULT_SYSTEM,
     FORMATIONS,
+    RECEIVE_STAGES,
     SYSTEMS,
+    afterReceiveFormation,
     assignRoles,
     formationPoints,
     keepsFrontRowOnReceive,
 } from '../formations.js';
+import { liberoSheet } from '../libero.js';
+import { planPrompts } from '../plan.js';
 import { el, mount, openSheet, closeSheet, toast, buzz, confirmDialog } from './dom.js';
 
 /**
@@ -34,6 +42,9 @@ import { el, mount, openSheet, closeSheet, toast, buzz, confirmDialog } from './
  * for checking the lineup against the referee.
  */
 let formation = 'base';
+
+/** Whether the serve-receive view is showing the receive or where it ends up. */
+const isReceiveView = (key) => key === 'receive' || key === 'afterReceive';
 
 /**
  * Positions captured just before a formation switch, so the new bubbles can be
@@ -87,6 +98,15 @@ function runFlip(from) {
     }
 }
 
+/**
+ * Plan prompts the coach has waved away, and where they were standing when they
+ * did. Session-only, like the chosen formation: a skipped prompt is a moment's
+ * decision, not a fact about the match, and storing it would be the "applied"
+ * flag that `js/plan.js` exists to avoid.
+ */
+const dismissedPrompts = new Set();
+let dismissedAt = null;
+
 /** Player currently selected for a substitution, if any. */
 
 export function renderCourt(root, store, actions) {
@@ -102,9 +122,14 @@ export function renderCourt(root, store, actions) {
         root,
         scoreboard(store, live, set),
         courtMap(store, live, set),
+        planStrip(store, live, set),
         benchStrip(store, live, actions),
-        recentStrip(store, live),
+        // The action bar sits above the history deliberately. +1 Us / +1 Them
+        // are the most-tapped controls on the screen — they carry the rallies
+        // that outrun stat detail — while the history is only read when undoing
+        // an entry or two. Frequency decides vertical order.
         actionBar(store, live, set, actions),
+        recentStrip(store, live),
     );
 
     if (flipFrom) {
@@ -406,7 +431,7 @@ function pickPlayerForSlot(store, position, chosen, onPick) {
                 [
                     el('span.picker__num', { text: `#${player.number}` }),
                     player.name && el('span.picker__name', { text: player.name }),
-                    player.position && el('span.picker__pos', { text: player.position }),
+                    positionsLabel(player) && el('span.picker__pos', { text: positionsLabel(player) }),
                     chosen.has(player.id) && el('span.picker__flag', { text: 'on court' }),
                 ],
             ),
@@ -473,7 +498,16 @@ function courtMap(store, live, set) {
         playerLookup: lookup,
     });
     const { roleOf, mismatches } = assignRoles(live.lineup, live.rotation, lookup, system);
-    const current = FORMATIONS.find((f) => f.key === formation) ?? FORMATIONS[0];
+    const current =
+        formation === 'afterReceive'
+            ? {
+                  label: 'Serve Rcv',
+                  note:
+                      afterReceiveFormation(live.rotation, system) === 'rotation'
+                          ? 'Where they attack from after the pass — no switch this rotation'
+                          : 'Where they attack from after the pass',
+              }
+            : (FORMATIONS.find((f) => f.key === formation) ?? FORMATIONS[0]);
     const noSwitch = formation === 'receive' && keepsFrontRowOnReceive(live.rotation, system);
 
     return el('section.court', {}, [
@@ -491,13 +525,30 @@ function courtMap(store, live, set) {
             'div.segmented.segmented--sm',
             {},
             FORMATIONS.map((option) =>
-                toggleButton(option.label, formation === option.key, () => setFormation(option.key, store)),
+                toggleButton(
+                    option.label,
+                    option.key === 'receive' ? isReceiveView(formation) : formation === option.key,
+                    () => setFormation(option.key, store),
+                ),
             ),
         ),
+        isReceiveView(formation) &&
+            el(
+                'div.segmented.segmented--sm.segmented--sub',
+                {},
+                RECEIVE_STAGES.map((stage) =>
+                    toggleButton(stage.label, formation === stage.key, () => setFormation(stage.key, store)),
+                ),
+            ),
+
         el('p.court__hint', { text: current.note }),
+
         noSwitch &&
             el('p.court__hint.court__hint--note', {
-                text: `Rotation ${live.rotation}: the front row stays where it receives — outside right, opposite outside. Switch to Rotation to see where they attack from.`,
+                text:
+                    formation === 'afterReceive'
+                        ? `Rotation ${live.rotation}: no switch — the outside stays right and the opposite stays outside, so they attack from where they received.`
+                        : `Rotation ${live.rotation}: the front row does not switch after this receive. Tap After pass to see where they attack from.`,
             }),
         mismatches.length > 0 &&
             el('p.court__hint.court__hint--warn', {
@@ -521,6 +572,18 @@ function bubble(store, live, rotationalPosition, points, roleOf) {
     const isServer = live.serving === 'us' && rotationalPosition === 1;
     const isFront = FRONT_ROW.includes(rotationalPosition);
 
+    // Hue says what they play, lightness says which row they are in — so
+    // colouring by position does not cost the front/back read. Must come after
+    // isFront: reading it earlier is a temporal dead zone error that kills the
+    // whole court render, and the unit tests cannot see it.
+    //
+    // The row also decides *which* position a player who goes all the way
+    // around is playing right now: an S/OH reads as a setter in the back and an
+    // outside in the front, because a 6-2 setter cannot set from the front row.
+    const row = isFront ? 'front' : 'back';
+    const colour = player ? colorForPlayer(player, store.state.positionColors, row) : null;
+    const fill = player ? (isFront ? colour : darkenHex(colour)) : null;
+
     const classes = ['bubble'];
     classes.push(isFront ? 'bubble--front' : 'bubble--back');
     if (isServer) classes.push('bubble--server');
@@ -533,7 +596,9 @@ function bubble(store, live, rotationalPosition, points, roleOf) {
             class: classes.join(' '),
             // Deeper players sit in front, so an overlapped bubble still has
             // its own edge to tap.
-            style: `left:${point.x * 100}%;top:${point.y * 100}%;z-index:${Math.round(point.y * 100)}`,
+            style:
+                `left:${point.x * 100}%;top:${point.y * 100}%;z-index:${Math.round(point.y * 100)}` +
+                (fill ? `;background:${fill}` : ''),
             dataset: player ? { player: player.id } : {},
             disabled: !player,
             onClick: () => {
@@ -549,10 +614,14 @@ function bubble(store, live, rotationalPosition, points, roleOf) {
             player && roleOf?.[player.id] && el('span.bubble__role', { text: roleOf[player.id] }),
             // Setter and libero are the two worth seeing mid-rally — but the
             // role already says "S1", so the badge is only needed without one.
+            // The badge follows the same row rule as the colour, so an S/OH
+            // wears "S" in the back and nothing in the front, where she is
+            // playing outside. A pure setter in the front row keeps her S: she
+            // really is one, she just cannot set from there.
             player &&
                 !roleOf?.[player.id] &&
-                HIGHLIGHTED_POSITIONS.includes(player.position) &&
-                el('span.bubble__tag', { text: player.position }),
+                HIGHLIGHTED_POSITIONS.includes(primaryPosition(player, row)) &&
+                el('span.bubble__tag', { text: primaryPosition(player, row) }),
         ],
     );
 }
@@ -581,6 +650,10 @@ function benchStrip(store, live, actions) {
             {},
             bench.map((player) =>
                 el('span.chip.chip--static', {}, [
+                    el('span.chip__dot', {
+                        style: `background:${colorForPlayer(player, store.state.positionColors)}`,
+                        title: positionsLabel(player, ' · ') || 'No position',
+                    }),
                     el('span.chip__num', { text: `#${player.number}` }),
                     player.name && el('span.chip__name', { text: player.name }),
                 ]),
@@ -616,6 +689,85 @@ function recentStrip(store, live) {
                     text: entry.winner ? `${entry.scoreAfter.us}–${entry.scoreAfter.them}` : '·',
                 }),
                 el('span.recent__text', { text: describeEvent(entry.event, (id) => store.player(id)) }),
+            ]),
+        ),
+    );
+}
+
+/* -------------------------------------------------------------- game plan */
+
+/**
+ * Prompts from the plan for the position right now — the swap the coach already
+ * decided on, offered at the moment it becomes legal.
+ *
+ * Three rules, and they are the whole design:
+ *
+ * - **Never auto-apply.** Deviating from the plan is normal coaching, and a
+ *   sub recorded that did not happen is worse than one missed.
+ * - **Always dismissible**, and a dismissal lasts until the rotation moves on,
+ *   so ignoring it does not mean fighting it every rally.
+ * - **Nothing is stored about having taken it.** Whether to show is derived
+ *   from the live lineup, which is what makes a second pass through the same
+ *   rotation, a new set, and undo all behave without a flag to keep in step.
+ */
+function planStrip(store, live, set) {
+    const plan = store.planFor();
+    if (!plan.libero && plan.subs.length === 0) return null;
+
+    const sheet = liberoSheet(set, { liberoIds: store.liberoIds });
+    const onCourt = new Set(live.lineup.filter(Boolean));
+    // Everyone off court, which deliberately includes the player the libero
+    // replaced. The Subs tab hides her from its picker because she is reserved
+    // rather than benched — but she is exactly who the libero-return prompt
+    // needs, so here "off court" is the right test.
+    const available = store.roster.filter((player) => !onCourt.has(player.id)).map((player) => player.id);
+
+    // A dismissal lasts only while the team is standing in this rotation of this
+    // set. Rotate away and back and the offer returns, because that is a fresh
+    // chance to make the sub — but it will not re-ask every rally in between.
+    const here = `${set.id}:${live.rotation}`;
+    if (dismissedAt !== here) {
+        dismissedPrompts.clear();
+        dismissedAt = here;
+    }
+
+    const prompts = planPrompts({
+        plan,
+        lineup: live.lineup,
+        rotation: live.rotation,
+        available,
+        liberoReplaced: sheet.awaitingLiberoReturn[0] ?? null,
+    }).filter((prompt) => !dismissedPrompts.has(prompt.id));
+
+    if (prompts.length === 0) return null;
+
+    return el(
+        'section.planstrip',
+        {},
+        prompts.map((prompt) =>
+            el('div.planstrip__row', {}, [
+                el('span.planstrip__label', { text: prompt.kind === 'libero' ? 'Libero' : `Rot ${prompt.rotation}` }),
+                el('span.planstrip__swap', {
+                    text: `${playerLabel(store.player(prompt.inId))} > ${playerLabel(store.player(prompt.outId))}`,
+                }),
+                el('button.btn.btn--primary.btn--sm', {
+                    type: 'button',
+                    text: 'Make sub',
+                    onClick: () => {
+                        store.recordSub(prompt.outId, prompt.inId, prompt.kind === 'libero' ? 'libero' : 'sub');
+                        buzz();
+                        toast('Sub recorded');
+                    },
+                }),
+                el('button.planstrip__skip', {
+                    type: 'button',
+                    'aria-label': 'Skip',
+                    text: '✕',
+                    onClick: () => {
+                        dismissedPrompts.add(prompt.id);
+                        store.commit();
+                    },
+                }),
             ]),
         ),
     );
@@ -714,8 +866,8 @@ function openStatSheet(store, player, live) {
     openSheet({
         title: playerLabel(player),
         subtitle: position
-            ? `Position ${position} · ${POSITION_LABELS[position]}${player.position ? ` · ${player.position}` : ''}`
-            : player.position,
+            ? `Position ${position} · ${POSITION_LABELS[position]}${positionsLabel(player) ? ` · ${positionsLabel(player, ' · ')}` : ''}`
+            : positionsLabel(player, ' · '),
         body,
     });
 }

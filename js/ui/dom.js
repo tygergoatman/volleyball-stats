@@ -103,10 +103,13 @@ export function closeSheet() {
     activeSheet = null;
     document.body.classList.remove('sheet-open');
     scrim.classList.remove('scrim--visible');
-    // Go inert immediately. The node lingers for the fade-out, and until this
-    // was added a second tap inside that window hit the same button again —
-    // which courtside meant one excited double-tap recording two kills.
-    scrim.style.pointerEvents = 'none';
+    // The panel goes inert immediately while the scrim keeps swallowing taps
+    // for the length of the fade-out. Both halves matter, and each was learned
+    // from a real double-tap: a live panel meant one excited double-tap on a
+    // stat recorded two kills, and a fully inert scrim let the second tap fall
+    // through to whatever sits underneath — which, since the action bar moved
+    // above the history, is Undo, silently erasing the entry just recorded.
+    scrim.firstElementChild?.style.setProperty('pointer-events', 'none');
     setTimeout(() => scrim.remove(), 180);
 }
 

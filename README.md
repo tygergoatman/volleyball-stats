@@ -163,11 +163,39 @@ draw green arrows for the movement after the pass, and on a phone-sized court wa
 travel reads better than arrows drawn over the top. Motion is skipped if your phone is set to reduce
 it.
 
-In rotations 1 and 4 your sheets leave the front row where it receives — outside stays right,
-opposite stays outside. Those rotations say so under the court. That arrangement is the **Rotation**
-view, so switching there shows where they attack from.
+Inside the serve-receive view there is a second toggle: **Receive** and **After pass**. Receive is the
+passing formation; After pass is where everyone ends up once the ball is up, and the players travel
+between the two.
+
+That covers your alternate. In rotations 1 and 4 your sheets leave the front row where it receives —
+outside stays right, opposite stays outside — so After pass shows that arrangement rather than the
+usual switch, and says so under the court. In every other rotation it shows Base.
 
 Pick the offense at set setup. Only 6-2 is built; the picker appears once there is more than one.
+
+### Court colours
+
+Bubbles are coloured by roster position, so the setter, libero and DS stand out while you are
+capturing. Hitters share a colour by default — the useful glance is "hitter or specialist", not six
+competing hues — and the shade still darkens for the back row, so position and row read at once.
+
+Change any of them under Roster → **Court colours**. The swatches are a fixed set because every one is
+checked to stay legible under the white text on a bubble; a free colour picker would let an unreadable
+one through.
+
+Players with no position keep the original blue, so nothing changes until you tag somebody.
+
+**Players who go all the way around can carry more than one position** — setter in the back, outside
+in the front. Tap every one that applies, and the roster list shows the full set.
+
+On court, **the row she is standing in decides which one she is playing**. Setters set from the back
+row only, so an S/OH is setter-orange while she is back and hitter-blue once she rotates to the
+front — the colour follows the job, not the label. A player with only one position keeps it in both
+rows: a setter in the front row is still a setter, she just can't set from there.
+
+Libero is the exception and stands alone; it can't be combined with anything. Tagging more than one
+position also stops the "this doesn't look like a 6-2" note firing at a player who genuinely plays
+both slots.
 
 ### The court
 
@@ -303,6 +331,44 @@ gets old data close, but only newly recorded sets are exact.
 
 The court map still shows the bench so you can see who is available; it just does not act on it.
 
+### Planning subs ahead — the Plan panel
+
+Write the swaps you already know before the match, and the Court tab prompts you when each one comes
+up. It reads the way you write it on paper — **in > out**:
+
+```
+L        #19 Tegan > #4 Sky      whenever they rotate back
+Rot 3    #8 Britt  > #2 Olive
+Rot 6    #2 Olive  > #8 Britt
+```
+
+Two kinds of row:
+
+- **The libero pairing** needs no rotation. Say who she goes in for once, and the prompt appears
+  every time that player rotates to the back row, and again when the slot reaches the front and the
+  libero has to come off.
+- **A sub at a rotation** is prompted as you rotate into that number — which is when the ball is
+  dead and the sub is legal.
+
+**Returns are their own row.** `#8 in for #2` at rotation 3 and `#2 back in for #8` at rotation 6 are
+two entries, so you decide when she comes back rather than the app guessing.
+
+The prompt appears just under the court, with **Make sub** to record it and **✕** to wave it away.
+It never applies anything on its own and never blocks — deviating from the plan is normal. Skipping
+one keeps it quiet while you are in that rotation; rotate around and it offers again, because that
+is a fresh chance to make the swap.
+
+Nothing is stored about whether a planned sub has happened. A prompt shows only when the player
+going out is on court and the player coming in is not, so a sub already made stops offering, a new
+set re-arms everything by itself, and undoing a sub brings its prompt back.
+
+A plan belongs to a team and is reused all season, and opens on whichever team you last picked on the
+Roster tab. If you run more than one, there is a picker at the top of the panel while no match is
+open.
+Scheduled subs count against your 15 per set and the panel says how many; libero replacements are
+unlimited and cost nothing. A row naming somebody no longer on the roster is greyed rather than
+dropped, so you can decide whether it should go.
+
 ## Layout
 
 ```
@@ -314,14 +380,15 @@ volleyball-stats/
 ├── css/app.css
 ├── js/
 │   ├── model.js            stat definitions, rotation maths, set replay  (pure)
-│   ├── libero.js           libero tracking sheet and sub counting          (pure)
+│   ├── libero.js           libero tracking sheet and sub counting        (pure)
+│   ├── plan.js             planned subs, and which are due right now     (pure)
 │   ├── stats.js            aggregation and derived metrics               (pure)
 │   ├── store.js            state, persistence, actions
 │   ├── app.js              tab routing, match lifecycle, wake lock
 │   └── ui/
 │       ├── dom.js          element helper, bottom sheet, toast
 │       ├── court.js        capture view and stat sheet
-│       ├── subs.js          libero tracking sheet, substitutions
+│       ├── subs.js         libero tracking sheet, subs, the plan
 │       ├── statsview.js    stat tables and rotation breakdown
 │       ├── roster.js       roster, team settings, backup
 │       └── log.js          point-by-point log

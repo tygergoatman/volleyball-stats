@@ -7,19 +7,45 @@
  * spot swing players at a glance.
  */
 
-import { ROSTER_POSITIONS, isLibero, isSetter, playerLabel } from '../model.js';
+import { POSITION_COLORS, ROSTER_POSITIONS, colorForPosition, playerLabel } from '../model.js';
 import { APP_VERSION } from '../version.js';
 import { el, mount, openSheet, closeSheet, toast, confirmDialog, downloadText, shareFile } from './dom.js';
 
 /** Which team's players are listed. null means everyone. */
 let filterTeamId = null;
+let filterStarted = false;
 const UNTAGGED = '__untagged__';
 
+/**
+ * Show one team here — and, when it is a real team, make it the app's default.
+ *
+ * One coach, one team for most of a season: picking JV on this tab _is_ the act
+ * of saying "JV is the team I am working with", so it should carry. A new match
+ * then preselects it and the plan panel opens on it, instead of everything
+ * falling back to whichever team happens to be first in `roster.json`.
+ *
+ * Showing everyone, or "No team", deliberately leaves the default alone —
+ * neither of those is a team, and clearing a filter to look at the whole program
+ * is not a decision about who you coach.
+ */
+function selectTeam(store, id) {
+    filterTeamId = id;
+    if (id && id !== UNTAGGED) store.setActiveTeam(id);
+    else store.commit();
+}
+
 export function renderRoster(root, store) {
+    // Open on the team in context rather than on everyone, so the tab comes back
+    // where it was left after a reload. Once per session only: clearing the
+    // filter afterwards has to stick for as long as the tab is being used.
+    if (!filterStarted) {
+        filterStarted = true;
+        filterTeamId = store.state.activeTeamId ?? null;
+    }
     // A filter pointing at a team that no longer exists would hide everyone.
     if (filterTeamId && filterTeamId !== UNTAGGED && !store.team(filterTeamId)) filterTeamId = null;
 
-    mount(root, teamsPanel(store), playersPanel(store), seasonPanel(store), dataPanel(store));
+    mount(root, teamsPanel(store), playersPanel(store), colorsPanel(store), seasonPanel(store), dataPanel(store));
     return root;
 }
 
@@ -57,10 +83,7 @@ function teamsPanel(store) {
                                   'button.teamrow__main',
                                   {
                                       type: 'button',
-                                      onClick: () => {
-                                          filterTeamId = filterTeamId === team.id ? null : team.id;
-                                          store.commit();
-                                      },
+                                      onClick: () => selectTeam(store, filterTeamId === team.id ? null : team.id),
                                   },
                                   [
                                       el('span.teamrow__name', { text: team.name }),
@@ -182,15 +205,15 @@ function playersPanel(store) {
                               [
                                   el('span.rosterlist__num', { text: `#${player.number}` }),
                                   player.name && el('span.rosterlist__name', { text: player.name }),
-                                  player.position &&
-                                      el('span.tag', {
-                                          class: isSetter(player)
-                                              ? 'tag--setter'
-                                              : isLibero(player)
-                                                ? 'tag--libero'
-                                                : '',
-                                          text: player.position,
+                                  // One tag per position, each in its own
+                                  // colour — the roster has room to show the
+                                  // whole list, unlike a court bubble.
+                                  ...player.positions.map((position) =>
+                                      el('span.tag.tag--pos', {
+                                          style: `background:${colorForPosition(position, store.state.positionColors)}`,
+                                          text: position,
                                       }),
+                                  ),
                                   ...player.teams.map((id) =>
                                       el('span.tag.tag--team', { text: store.team(id)?.name ?? id }),
                                   ),
@@ -208,10 +231,7 @@ function filterButton(store, id, label) {
         type: 'button',
         class: filterTeamId === id ? 'seg--on' : '',
         text: label,
-        onClick: () => {
-            filterTeamId = id;
-            store.commit();
-        },
+        onClick: () => selectTeam(store, id),
     });
 }
 
@@ -328,7 +348,7 @@ function openPlayerSheet(store, player) {
     const draft = {
         number: player?.number ?? '',
         name: player?.name ?? '',
-        position: player?.position ?? '',
+        positions: player?.positions?.slice() ?? [],
         // A new player added while a team filter is on joins that team.
         teams: player ? player.teams.slice() : filterTeamId && filterTeamId !== UNTAGGED ? [filterTeamId] : [],
     };
@@ -371,18 +391,30 @@ function openPlayerSheet(store, player) {
         ),
     );
 
+    // Positions are a multi-select, for the players who go all the way around:
+    // setter in the back, outside in the front. One exception — **L is
+    // exclusive**. Within a set you either are the designated libero or you are
+    // not; a libero may not play front row or attack above the net, so "L and
+    // OH" describes no legal player. Enforcing it in the picker rather than at
+    // save time also keeps `SPECIALIST_POSITIONS` unambiguous downstream.
     const positionRow = el(
         'div.segmented.segmented--wrap',
         {},
         ROSTER_POSITIONS.map((position) =>
             el('button.seg', {
                 type: 'button',
-                class: draft.position === position ? 'seg--on' : '',
+                class: draft.positions.includes(position) ? 'seg--on' : '',
                 text: position,
                 onClick: () => {
-                    draft.position = draft.position === position ? '' : position;
+                    if (draft.positions.includes(position)) {
+                        draft.positions = draft.positions.filter((p) => p !== position);
+                    } else if (position === 'L') {
+                        draft.positions = ['L'];
+                    } else {
+                        draft.positions = [...draft.positions.filter((p) => p !== 'L'), position];
+                    }
                     for (const sibling of positionRow.children) {
-                        sibling.classList.toggle('seg--on', sibling.textContent === draft.position);
+                        sibling.classList.toggle('seg--on', draft.positions.includes(sibling.textContent));
                     }
                 },
             }),
@@ -400,10 +432,10 @@ function openPlayerSheet(store, player) {
             el('p.panel__hint', { text: 'Pick as many as they play for. Untagged players cannot be put in a lineup.' }),
         ]),
         el('div.field', {}, [
-            el('span.field__label', { text: 'Position' }),
+            el('span.field__label', { text: 'Positions' }),
             positionRow,
             el('p.panel__hint', {
-                text: 'S and L are the setter and libero — picking them here is what marks the player on the court map.',
+                text: 'Pick every position they play. S and L mark the setter and libero on the court map; where a player has several, the most distinctive one sets their colour. Libero is on its own — it cannot be combined.',
             }),
         ]),
         el('div.form__actions', {}, [
@@ -532,6 +564,64 @@ function fileButton(label, mode, store) {
                     toast('That file could not be read', 'warn');
                 }
             },
+        }),
+    ]);
+}
+
+/**
+ * Court colours by position.
+ *
+ * The swatches are a fixed set rather than a free colour picker: every one is
+ * checked to stay legible under the white bold text on a bubble, and picking
+ * from six chips on a phone beats dragging a colour wheel.
+ */
+const SWATCHES = ['#2f81f7', '#ea580c', '#a855f7', '#0d9488', '#db2777', '#64748b'];
+
+function colorsPanel(store) {
+    const chosen = store.state.positionColors ?? {};
+    const custom = Object.keys(chosen).length > 0;
+
+    return el('section.panel', {}, [
+        el('div.panel__head', {}, [
+            el('h2.panel__title', { text: 'Court colours' }),
+            custom &&
+                el('button.btn.btn--ghost.btn--sm', {
+                    type: 'button',
+                    text: 'Reset',
+                    onClick: () => {
+                        store.resetPositionColors();
+                        toast('Colours reset');
+                    },
+                }),
+        ]),
+        el('p.panel__hint', {
+            text: 'What each position looks like on the court. Hitters share a colour by default, so the setter, libero and DS stand out at a glance.',
+        }),
+        el(
+            'ul.colourlist',
+            {},
+            ROSTER_POSITIONS.map((position) => {
+                const current = chosen[position] ?? POSITION_COLORS[position];
+                return el('li.colourlist__row', {}, [
+                    el('span.tag.tag--pos', { style: `background:${current}`, text: position }),
+                    el(
+                        'div.colourlist__swatches',
+                        {},
+                        SWATCHES.map((hex) =>
+                            el('button.swatch', {
+                                type: 'button',
+                                class: current === hex ? 'swatch--on' : '',
+                                style: `background:${hex}`,
+                                'aria-label': `${position} colour`,
+                                onClick: () => store.setPositionColor(position, hex),
+                            }),
+                        ),
+                    ),
+                ]);
+            }),
+        ),
+        el('p.panel__hint', {
+            text: 'Players with no position keep the default blue, so this only changes what you have tagged.',
         }),
     ]);
 }

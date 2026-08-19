@@ -26,13 +26,22 @@ const SHELL = [
     './roster.json',
     './manifest.webmanifest',
     './css/app.css',
+    // Every module, without exception. `libero.js`, `formations.js` and
+    // `ui/subs.js` were each missed when they shipped and only worked offline
+    // because the fetch handler caches what it serves — so an install that
+    // never ran online would die on the *first* import, not on the tab that
+    // needed them. Add the file here in the same change that creates it.
     './js/app.js',
     './js/model.js',
     './js/stats.js',
     './js/store.js',
     './js/version.js',
+    './js/libero.js',
+    './js/formations.js',
+    './js/plan.js',
     './js/ui/dom.js',
     './js/ui/court.js',
+    './js/ui/subs.js',
     './js/ui/roster.js',
     './js/ui/statsview.js',
     './js/ui/log.js',

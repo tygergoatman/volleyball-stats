@@ -9,12 +9,27 @@
  */
 
 import { SERVING_ORDER, liberoSheet } from '../libero.js';
-import { POSITION_LABELS, playerLabel } from '../model.js';
+import { POSITION_LABELS, isLibero, playerLabel } from '../model.js';
+import { plannedSubCost } from '../plan.js';
 import { el, mount, openSheet, closeSheet, toast, buzz } from './dom.js';
+
+/**
+ * Which team the plan panel is showing while no match is open. Session-only:
+ * it is a viewing choice, not a fact about the season.
+ */
+let planTeamId = null;
+
+/** The team the plan panel edits: the match's if one is open, else the pick. */
+function planTeam(store) {
+    if (store.activeMatch) return store.activeTeam;
+    return store.team(planTeamId) ?? store.activeTeam ?? store.teams[0] ?? null;
+}
 
 export function renderSubs(root, store, actions) {
     const set = store.activeSet;
     if (!set) {
+        // The plan still shows: it is written *before* a match, so gating it
+        // behind a live set would put it out of reach exactly when it is needed.
         return mount(
             root,
             el('section.panel.panel--center', {}, [
@@ -31,12 +46,260 @@ export function renderSubs(root, store, actions) {
                         onClick: actions.pickMatch,
                     }),
             ]),
+            planPanel(store),
         );
     }
 
     const sheet = liberoSheet(set, { liberoIds: store.liberoIds });
-    mount(root, countPanel(store, set, sheet), rowsPanel(store, sheet));
+    mount(root, countPanel(store, set, sheet), planPanel(store), rowsPanel(store, sheet));
     return root;
+}
+
+/* -------------------------------------------------------------- game plan */
+
+/**
+ * The planned substitutions, written the way the coach writes them on paper:
+ * `L > 19`, `8 > 4`, `4 > 8` — read as **in > out**.
+ *
+ * Returns are ordinary rows rather than something the app infers. Guessing when
+ * a player should come back means prompting at the wrong moment, which is worse
+ * than not prompting at all.
+ */
+function planPanel(store) {
+    const team = planTeam(store);
+    if (!team) return null;
+
+    // The team in context is the one picked on the Roster tab, which for a coach
+    // with one team is simply theirs — so this opens on the right plan without
+    // being told. The picker stays for the weeks somebody runs two, and only
+    // while no match is open: once one is running the team is settled by the
+    // match, and offering a different one here would just be a way to edit the
+    // wrong plan.
+    const locked = Boolean(store.activeMatch);
+    const teams = store.teams;
+
+    const plan = store.planFor(team.id);
+    const cost = plannedSubCost(plan);
+    const rows = [];
+
+    if (plan.libero) {
+        rows.push(
+            planRow(store, {
+                lead: 'L',
+                inId: plan.libero.liberoId,
+                outId: plan.libero.replacesId,
+                note: 'whenever they rotate back',
+                onRemove: () => {
+                    store.setLiberoPlan(null, team.id);
+                    toast('Libero plan cleared');
+                },
+            }),
+        );
+    }
+
+    for (const row of plan.subs) {
+        rows.push(
+            planRow(store, {
+                lead: `Rot ${row.rotation}`,
+                inId: row.inId,
+                outId: row.outId,
+                onRemove: () => {
+                    store.removePlanSub(row.id, team.id);
+                    toast('Planned sub removed');
+                },
+            }),
+        );
+    }
+
+    return el('section.panel', {}, [
+        el('div.panel__head', {}, [
+            el('h2.panel__title', { text: locked ? `Plan · ${team.name}` : 'Plan' }),
+            el('button.btn.btn--ghost.btn--sm', {
+                type: 'button',
+                text: '+ Add',
+                onClick: () => openPlanSheet(store, team),
+            }),
+        ]),
+        !locked &&
+            teams.length > 1 &&
+            el(
+                'div.segmented',
+                {},
+                teams.map((option) =>
+                    el('button.seg', {
+                        type: 'button',
+                        class: option.id === team.id ? 'seg--on' : '',
+                        text: option.name,
+                        title: option.fullName,
+                        onClick: () => {
+                            planTeamId = option.id;
+                            store.commit();
+                        },
+                    }),
+                ),
+            ),
+        rows.length === 0
+            ? el('p.panel__hint', {
+                  text: 'Nothing planned. Add the swaps you already know — the libero pairing, and any sub keyed to a rotation — and the Court tab will prompt you when each one comes up.',
+              })
+            : el('ul.planlist', {}, rows),
+        rows.length > 0 &&
+            el('p.panel__hint', {
+                text:
+                    cost === 0
+                        ? 'Libero replacements are unlimited and cost nothing against the 15.'
+                        : `${cost} of the 15 substitutions per set, if every row is taken. Libero replacements cost nothing.`,
+            }),
+    ]);
+}
+
+function planRow(store, { lead, inId, outId, note, onRemove }) {
+    const arriving = store.player(inId);
+    const leaving = store.player(outId);
+    // A plan outlives roster changes, so a row can end up pointing at somebody
+    // who has left. Say so rather than dropping it silently — the coach is the
+    // one who decides whether it should go.
+    const stale = !arriving || !leaving;
+
+    return el('li.planlist__row', { class: stale ? 'planlist__row--stale' : '' }, [
+        el('span.planlist__lead', { text: lead }),
+        el('span.planlist__swap', {
+            text: `${arriving ? playerLabel(arriving) : '—'} > ${leaving ? playerLabel(leaving) : '—'}`,
+        }),
+        note && !stale && el('span.planlist__note', { text: note }),
+        stale && el('span.tag.tag--warn', { text: 'not on the roster' }),
+        el('button.planlist__remove', { type: 'button', 'aria-label': 'Remove', text: '✕', onClick: onRemove }),
+    ]);
+}
+
+function openPlanSheet(store, team) {
+    // The team's own players, not `store.roster` — with no match open those are
+    // two different teams, and picking from the wrong one builds a plan whose
+    // rows can never fire.
+    const roster = store.playersForTeam(team.id);
+    const liberos = roster.filter(isLibero);
+    const draft = { kind: liberos.length > 0 ? 'libero' : 'sub', rotation: 1, inId: '', outId: '' };
+
+    const body = el('div.form', {}, []);
+
+    const rebuild = () => {
+        const isLiberoPlan = draft.kind === 'libero';
+        const inPool = isLiberoPlan ? liberos : roster;
+
+        mount(
+            body,
+            el('div.field', {}, [
+                el('span.field__label', { text: 'What kind' }),
+                el('div.segmented', {}, [
+                    el('button.seg', {
+                        type: 'button',
+                        class: isLiberoPlan ? 'seg--on' : '',
+                        text: 'Libero',
+                        disabled: liberos.length === 0,
+                        onClick: () => {
+                            draft.kind = 'libero';
+                            draft.inId = '';
+                            rebuild();
+                        },
+                    }),
+                    el('button.seg', {
+                        type: 'button',
+                        class: !isLiberoPlan ? 'seg--on' : '',
+                        text: 'Sub at a rotation',
+                        onClick: () => {
+                            draft.kind = 'sub';
+                            rebuild();
+                        },
+                    }),
+                ]),
+                el('p.panel__hint', {
+                    text: isLiberoPlan
+                        ? 'A standing pairing — no rotation needed. The prompt appears whenever the player she replaces rotates to the back row, and again when she has to come off.'
+                        : 'Prompted as you rotate into this number, which is when the ball is dead and the sub is legal.',
+                }),
+            ]),
+            !isLiberoPlan &&
+                el('div.field', {}, [
+                    el('span.field__label', { text: 'Rotation' }),
+                    el(
+                        'div.segmented',
+                        {},
+                        [1, 2, 3, 4, 5, 6].map((rotation) =>
+                            el('button.seg', {
+                                type: 'button',
+                                class: draft.rotation === rotation ? 'seg--on' : '',
+                                text: String(rotation),
+                                onClick: () => {
+                                    draft.rotation = rotation;
+                                    rebuild();
+                                },
+                            }),
+                        ),
+                    ),
+                ]),
+            playerField(inPool, 'In', draft.inId, (id) => {
+                draft.inId = id;
+                rebuild();
+            }),
+            playerField(
+                roster.filter((p) => p.id !== draft.inId),
+                'Out',
+                draft.outId,
+                (id) => {
+                    draft.outId = id;
+                    rebuild();
+                },
+            ),
+            el('div.form__actions', {}, [
+                el('button.btn.btn--primary', {
+                    type: 'button',
+                    text: 'Add to plan',
+                    disabled: !draft.inId || !draft.outId,
+                    onClick: () => {
+                        if (draft.kind === 'libero') {
+                            store.setLiberoPlan({ liberoId: draft.inId, replacesId: draft.outId }, team.id);
+                        } else {
+                            store.addPlanSub(
+                                { rotation: draft.rotation, inId: draft.inId, outId: draft.outId },
+                                team.id,
+                            );
+                        }
+                        closeSheet();
+                        toast('Added to the plan');
+                    },
+                }),
+            ]),
+        );
+    };
+
+    rebuild();
+    openSheet({ title: 'Add to plan', subtitle: `${team.name} · in > out`, body });
+}
+
+function playerField(pool, label, selectedId, onPick) {
+    if (pool.length === 0) {
+        return el('div.field', {}, [
+            el('span.field__label', { text: label }),
+            el('p.panel__hint', { text: 'Nobody available.' }),
+        ]);
+    }
+
+    return el('div.field', {}, [
+        el('span.field__label', { text: label }),
+        el(
+            'div.segmented.segmented--wrap',
+            {},
+            pool.map((player) =>
+                el('button.seg', {
+                    type: 'button',
+                    class: selectedId === player.id ? 'seg--on' : '',
+                    text: `#${player.number}`,
+                    title: playerLabel(player),
+                    onClick: () => onPick(selectedId === player.id ? '' : player.id),
+                }),
+            ),
+        ),
+    ]);
 }
 
 /* ------------------------------------------------------------- sub counter */

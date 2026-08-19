@@ -10,7 +10,8 @@
  * team removes a label, not people or the matches they played.
  */
 
-import { DEFAULT_FORMAT, SCHEMA_VERSION, computeSetState, isLibero, targetForSet } from './model.js';
+import { DEFAULT_FORMAT, SCHEMA_VERSION, computeSetState, isLibero, sortPositions, targetForSet } from './model.js';
+import { emptyPlan, normalisePlan } from './plan.js';
 import { DEFAULT_SYSTEM } from './formations.js';
 
 const STORAGE_KEY = 'volleyball-stats.v1';
@@ -47,21 +48,36 @@ function uniq(values) {
 /**
  * Normalise one player record from any source.
  *
- * Setter and libero used to be separate booleans alongside `position`, which
- * meant the roster could say a player was an outside hitter and the libero at
- * the same time. They are folded into `position` here, so older saved data and
- * older roster.json files still land in the right place.
+ * Position has been narrowed twice and both older shapes still arrive here, so
+ * both are read rather than migrated in a separate pass:
+ *
+ * - v1/v2 kept `isSetter` and `isLibero` as booleans beside `position`, which
+ *   let the roster claim a player was an outside hitter and the libero at once.
+ * - v3 kept a single `position` string, which could not say "setter in the back,
+ *   outside in the front" — the players who go all the way around.
+ *
+ * v4 is `positions[]`, canonically sorted so tap order never leaks into the
+ * record. A `roster.json` or a shared file written by an older build still lands
+ * in the right place, which is why the single-string form is read, not dropped.
  */
 function normalisePlayer(raw, { local = false, teams = [] } = {}) {
-    let position = raw.position ?? '';
-    if (!position && raw.isSetter) position = 'S';
-    if (!position && raw.isLibero) position = 'L';
+    // The v1/v2 booleans are consulted only when there is no `position`, the
+    // same precedence they had before. They must not become a *second* position
+    // now that several are legal: `position: 'OH', isSetter: true` was a record
+    // with a stale flag, not a coach saying she plays both, and reading it as
+    // S/OH would invent a fact from an old bug.
+    let legacy = [];
+    if (raw.position) legacy = [raw.position];
+    else if (raw.isSetter) legacy = ['S'];
+    else if (raw.isLibero) legacy = ['L'];
+
+    const positions = sortPositions(Array.isArray(raw.positions) ? raw.positions : legacy);
 
     return {
         id: String(raw.id ?? newId('p')),
         number: String(raw.number ?? '').trim(),
         name: String(raw.name ?? '').trim(),
-        position,
+        positions,
         teams: uniq([...(raw.teams ?? []), ...teams].map(String)),
         local,
     };
@@ -87,6 +103,17 @@ export function emptyState() {
         playerOverrides: {},
         /** Edits made in the app to team names defined in roster.json. */
         teamOverrides: {},
+        /** Court colours the coach has changed, by roster position. */
+        positionColors: {},
+        /**
+         * Planned substitutions, keyed by team id. A plan is reused all season,
+         * which is why it hangs off the team and not off a match.
+         *
+         * This is *input*, like the roster — storing it does not break the rule
+         * that score, rotation and lineup are always derived. Nothing about
+         * whether a planned sub has happened is stored; see `js/plan.js`.
+         */
+        plans: {},
         /**
          * Teams removed on this device. roster.json is shared and cannot be
          * edited from a phone, so a removal has to outlast a file refresh.
@@ -111,8 +138,22 @@ function migrate(raw) {
     const state = { ...emptyState(), ...raw };
     state.version = SCHEMA_VERSION;
     state.season = { ...emptyState().season, ...(raw.season ?? {}) };
-    state.playerOverrides = raw.playerOverrides ?? {};
+    // Overrides are raw change objects replayed over players after every roster
+    // refresh, so a v3 override carrying `position` would keep re-attaching the
+    // old single-string key to a v4 player long after the players themselves
+    // migrated. Convert them here, at the same time and by the same rule.
+    state.playerOverrides = Object.fromEntries(
+        Object.entries(raw.playerOverrides ?? {}).map(([id, override]) => {
+            if (!override || !('position' in override)) return [id, override];
+            const { position, ...rest } = override;
+            return [id, { ...rest, positions: sortPositions(position ? [position] : []) }];
+        }),
+    );
     state.teamOverrides = raw.teamOverrides ?? {};
+    state.positionColors = raw.positionColors ?? {};
+    state.plans = Object.fromEntries(
+        Object.entries(raw.plans ?? {}).map(([teamId, plan]) => [teamId, normalisePlan(plan)]),
+    );
     state.hiddenTeamIds = Array.isArray(raw.hiddenTeamIds) ? raw.hiddenTeamIds : [];
     state.archivedPlayers = raw.archivedPlayers ?? {};
     state.archivedTeams = raw.archivedTeams ?? {};
@@ -505,9 +546,10 @@ export class Store {
 
     /* --------------------------------------------------------------- players */
 
-    addPlayer({ number, name, position = '', teams = [] }) {
+    addPlayer({ number, name, position = '', positions = null, teams = [] }) {
         return this.update((state) => {
-            const player = normalisePlayer({ id: newId('p'), number, name, position, teams }, { local: true });
+            const raw = { id: newId('p'), number, name, teams, ...(positions ? { positions } : { position }) };
+            const player = normalisePlayer(raw, { local: true });
             state.players.push(player);
             state.players.sort(sortByNumber);
             return player;
@@ -523,6 +565,7 @@ export class Store {
             const player = state.players.find((p) => p.id === id);
             if (!player) return;
             if (changes.teams) changes = { ...changes, teams: uniq(changes.teams.map(String)) };
+            if (changes.positions) changes = { ...changes, positions: sortPositions(changes.positions) };
             Object.assign(player, changes);
             if (!player.local) {
                 state.playerOverrides[id] = { ...(state.playerOverrides[id] ?? {}), ...changes };
@@ -709,6 +752,61 @@ export class Store {
     /** Record a substitution in the active set. */
     recordSub(outId, inId, kind = 'sub') {
         return this.pushEvent({ type: 'sub', kind, outId, inId });
+    }
+
+    /* ------------------------------------------------------- position colours */
+
+    setPositionColor(position, hex) {
+        this.update((state) => {
+            if (!hex) delete state.positionColors[position];
+            else state.positionColors[position] = hex;
+        });
+    }
+
+    resetPositionColors() {
+        this.update((state) => {
+            state.positionColors = {};
+        });
+    }
+
+    /* ------------------------------------------------------------ game plan */
+
+    /** The planned substitutions for one team, or the active one. */
+    planFor(teamId = this.activeTeam?.id) {
+        if (!teamId) return emptyPlan();
+        return this.state.plans[teamId] ?? emptyPlan();
+    }
+
+    /** Set or clear the standing libero pairing. Pass null to clear it. */
+    setLiberoPlan(pairing, teamId = this.activeTeam?.id) {
+        if (!teamId) return;
+        this.update((state) => {
+            const plan = { ...(state.plans[teamId] ?? emptyPlan()) };
+            plan.libero = pairing?.liberoId && pairing?.replacesId ? { ...pairing } : null;
+            state.plans[teamId] = normalisePlan(plan);
+        });
+    }
+
+    /**
+     * Add one planned swap. Returns are ordinary rows, so a sub and its return
+     * are two calls — the coach decides when she comes back, not the app.
+     */
+    addPlanSub({ rotation, inId, outId }, teamId = this.activeTeam?.id) {
+        if (!teamId) return;
+        this.update((state) => {
+            const plan = { ...(state.plans[teamId] ?? emptyPlan()) };
+            plan.subs = [...(plan.subs ?? []), { id: newId('ps'), rotation, inId, outId }];
+            state.plans[teamId] = normalisePlan(plan);
+        });
+    }
+
+    removePlanSub(id, teamId = this.activeTeam?.id) {
+        if (!teamId) return;
+        this.update((state) => {
+            const plan = { ...(state.plans[teamId] ?? emptyPlan()) };
+            plan.subs = (plan.subs ?? []).filter((row) => row.id !== id);
+            state.plans[teamId] = normalisePlan(plan);
+        });
     }
 
     /** Everyone on the active team's roster tagged as a libero. */

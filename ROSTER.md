@@ -24,7 +24,7 @@ Player names are typed into the app instead and stay on that phone.
 
 Roster tab:
 
-- **+ Player** — number, name, position, and which teams they play for. A player
+- **+ Player** — number, name, positions, and which teams they play for. A player
   can carry more than one team tag.
 - **Tap a player** — edit any of that, or **Delete player** to remove them from
   the program. Stats already recorded stay in past matches either way.
@@ -107,7 +107,7 @@ Supported, and the sensible choice if several coaches ever share one program
 roster and you would rather type it on a keyboard than a phone. Numbers only:
 
 ```json
-{ "id": "p-023", "number": "23", "position": "MB", "teams": ["var"] }
+{ "id": "p-023", "number": "23", "positions": ["MB"], "teams": ["var"] }
 ```
 
 Two things to know before you do:
@@ -120,6 +120,11 @@ Two things to know before you do:
   lists. Remove them from the file instead. (Teams do not have this problem — a
   team removal is remembered.)
 
-`position` accepts `OH`, `MB`, `S`, `OPP`, `L` or `DS`. Choosing `S` or `L` is what
-marks the setter and libero on the court map — there is no separate flag, so the
-roster cannot contradict itself.
+`positions` is a list, and accepts `OH`, `MB`, `S`, `OPP`, `L` and `DS`. Give a
+player every position she plays — a setter who also hits outside is
+`["S", "OH"]`. Choosing `S` or `L` is what marks the setter and libero on the
+court map; there is no separate flag, so the roster cannot contradict itself.
+`L` stands alone: a libero cannot also be tagged something else.
+
+An older file using the single `position` string is still read, so nothing needs
+rewriting.

@@ -1823,3 +1823,180 @@ button:disabled {
 .court__grid--receive .bubble {
     width: 24%;
 }
+
+/* Position colour: a dot on bench chips, where a full fill would hurt legibility. */
+.chip__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: none;
+}
+
+/* --------------------------------------------------------- court colours */
+
+/* Position tag painted with the colour the court uses for that position. */
+.tag--pos {
+    color: #fff;
+    font-weight: 700;
+}
+
+.colourlist {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.colourlist__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.colourlist__row .tag--pos {
+    min-width: 44px;
+    text-align: center;
+}
+
+.colourlist__swatches {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.swatch {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+}
+
+.swatch--on {
+    border-color: var(--text);
+    box-shadow: 0 0 0 2px var(--bg);
+}
+
+/* The receive / after-pass stage toggle, nested under the formation bar. */
+.segmented--sub {
+    margin-top: 6px;
+    opacity: 0.95;
+}
+
+.segmented--sub .seg {
+    min-height: 30px;
+    font-size: 11px;
+}
+
+/* --------------------------------------------------------------- game plan */
+
+/* The prompt on the Court tab. Loud enough to notice mid-stoppage, quiet
+   enough that ignoring it is comfortable — a plan is a suggestion. */
+.planstrip {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.planstrip__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--set);
+    border-left-width: 4px;
+    border-radius: var(--radius);
+    padding: 8px 10px;
+}
+
+.planstrip__label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--set);
+    flex: none;
+}
+
+.planstrip__swap {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 700;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planstrip__skip {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 15px;
+}
+
+/* The editor on the Subs tab. */
+.planlist {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.planlist__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 7px 9px;
+}
+
+.planlist__row--stale {
+    opacity: 0.6;
+}
+
+.planlist__lead {
+    flex: none;
+    min-width: 46px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.planlist__swap {
+    font-size: 14px;
+    font-weight: 700;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planlist__note {
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planlist__remove {
+    flex: none;
+    margin-left: auto;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+}

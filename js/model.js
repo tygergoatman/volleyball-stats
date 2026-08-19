@@ -10,7 +10,7 @@
  * 3 flattened those into one roster of players carrying team tags, so a player
  *   who swings between JV and Varsity is one person rather than two records.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /* ------------------------------------------------------------------ court */
 
@@ -47,7 +47,168 @@ export const POSITION_LABELS = {
 /** Positions 2, 3 and 4 are front row and are eligible to attack above the net. */
 export const FRONT_ROW = [2, 3, 4];
 
+/** Positions 1, 5 and 6 — where the libero and defensive specialists play. */
+export const BACK_ROW = [1, 5, 6];
+
 export const ROSTER_POSITIONS = ['OH', 'MB', 'S', 'OPP', 'L', 'DS'];
+
+/**
+ * The order that decides a player's *primary* position, most distinctive first.
+ *
+ * A player who goes all the way around carries more than one position, but the
+ * court can only paint one colour and the roster only has room for one lead
+ * tag. The distinctive role wins: colour exists to answer "who is setting, who
+ * is the libero" at a glance, so somebody tagged both S and OH reads as a
+ * setter, which is the fact worth knowing mid-rally.
+ *
+ * `positions` is always stored sorted by this, which also means the record does
+ * not depend on the order the coach happened to tap — `['S','OH']` and
+ * `['OH','S']` are the same player.
+ */
+export const POSITION_PRECEDENCE = ['L', 'S', 'DS', 'OPP', 'MB', 'OH'];
+
+/**
+ * Canonicalise a set of positions: known values only, no duplicates, sorted by
+ * `POSITION_PRECEDENCE`.
+ *
+ * @param {string[]} positions
+ * @returns {string[]}
+ */
+export function sortPositions(positions) {
+    const known = [...new Set((positions ?? []).map((p) => String(p ?? '').trim()).filter(Boolean))].filter((p) =>
+        ROSTER_POSITIONS.includes(p),
+    );
+    return known.sort((a, b) => POSITION_PRECEDENCE.indexOf(a) - POSITION_PRECEDENCE.indexOf(b));
+}
+
+/**
+ * Positions split by the row they are actually played from.
+ *
+ * This is a 6-2 statement, and it is the team's: **setters set from the back
+ * row only.** A setter who has rotated to the front is hitting, not setting —
+ * that is what the second S in "6-2" is for. Libero and DS are back row by
+ * rule.
+ */
+export const FRONT_ROW_POSITIONS = ['OH', 'MB', 'OPP'];
+export const BACK_ROW_POSITIONS = ['S', 'L', 'DS'];
+
+/**
+ * The one position that stands for a player where only one fits.
+ *
+ * Pass `row` and it answers for where she is standing right now, which for a
+ * player who goes all the way around is a different answer front and back: an
+ * S/OH in the front row is playing outside and should be called an OH, because
+ * she cannot be setting from there. Without `row` it falls back to the static
+ * `POSITION_PRECEDENCE` order, which is what the roster list wants.
+ *
+ * A player whose positions are all on the other side of this split — a pure
+ * setter caught in the front row, a libero who should not be there at all —
+ * keeps her own position rather than being blanked. She is still that player;
+ * the lineup is what is odd, and the 6-2 and front-row-libero checks are the
+ * things that say so.
+ *
+ * @param {object|undefined} player
+ * @param {'front'|'back'|null} [row]
+ * @returns {string} `''` when the player has no position tagged
+ */
+export function primaryPosition(player, row = null) {
+    const positions = player?.positions ?? [];
+    if (positions.length === 0) return '';
+    if (row) {
+        const playedFromHere = row === 'front' ? FRONT_ROW_POSITIONS : BACK_ROW_POSITIONS;
+        const match = positions.find((p) => playedFromHere.includes(p));
+        if (match) return match;
+    }
+    return positions[0];
+}
+
+/**
+ * Whether a player plays any of the given positions.
+ *
+ * @param {object|undefined} player
+ * @param {string|string[]} positions
+ */
+export function playsPosition(player, positions) {
+    const wanted = Array.isArray(positions) ? positions : [positions];
+    return (player?.positions ?? []).some((p) => wanted.includes(p));
+}
+
+/**
+ * Every position a player carries, for display: `S/OH`, or `''` when untagged.
+ *
+ * The separator is a parameter because the roster has room to breathe and a
+ * court bubble does not.
+ *
+ * @param {object|undefined} player
+ * @param {string} [separator]
+ */
+export function positionsLabel(player, separator = '/') {
+    return (player?.positions ?? []).join(separator);
+}
+
+/**
+ * Court colours by position, so a glance tells you who is who mid-rally.
+ *
+ * Hitters share one colour by default because the useful signal is "hitter,
+ * setter, libero or DS" rather than six hues competing on one court — but every
+ * position is overridable, so they can be split later.
+ *
+ * Every colour here was checked for contrast against the white bold text on a
+ * bubble, at full strength and at the darkened back-row shade: all are at least
+ * 3.0:1. Amber and light teal were the obvious picks and both failed, so do not
+ * swap one in without re-checking.
+ */
+export const POSITION_COLORS = {
+    OH: '#2f81f7',
+    MB: '#2f81f7',
+    OPP: '#2f81f7',
+    S: '#ea580c',
+    L: '#a855f7',
+    DS: '#0d9488',
+};
+
+/** Players with no position keep the colour the court has always used. */
+export const DEFAULT_PLAYER_COLOR = '#2f81f7';
+
+/**
+ * The colour a player's bubble should be.
+ *
+ * @param {object|undefined} player
+ * @param {Record<string, string>} [overrides] per-position colours set in the app
+ */
+export function colorForPlayer(player, overrides = {}, row = null) {
+    return colorForPosition(primaryPosition(player, row), overrides);
+}
+
+/**
+ * The colour for one position, honouring any override.
+ *
+ * @param {string} position
+ * @param {Record<string, string>} [overrides]
+ */
+export function colorForPosition(position, overrides = {}) {
+    if (!position) return DEFAULT_PLAYER_COLOR;
+    return overrides[position] ?? POSITION_COLORS[position] ?? DEFAULT_PLAYER_COLOR;
+}
+
+/**
+ * Darken a hex colour. Back-row bubbles use this so the court still shows front
+ * and back at a glance once position colour has taken over the fill — hue says
+ * what they play, lightness says which row they are in.
+ *
+ * @param {string} hex `#rrggbb`
+ * @param {number} amount 0-1
+ */
+export function darkenHex(hex, amount = 0.22) {
+    const match = /^#?([\da-f]{6})$/i.exec(String(hex ?? '').trim());
+    if (!match) return hex;
+    const value = parseInt(match[1], 16);
+    const scale = (channel) => Math.max(0, Math.min(255, Math.round(channel * (1 - amount))));
+    const r = scale((value >> 16) & 255);
+    const g = scale((value >> 8) & 255);
+    const b = scale(value & 255);
+    return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+}
 
 /**
  * Positions that are worth calling out on the court map: knowing who is setting
@@ -59,11 +220,11 @@ export const ROSTER_POSITIONS = ['OH', 'MB', 'S', 'OPP', 'L', 'DS'];
 export const HIGHLIGHTED_POSITIONS = ['S', 'L'];
 
 export function isSetter(player) {
-    return player?.position === 'S';
+    return playsPosition(player, 'S');
 }
 
 export function isLibero(player) {
-    return player?.position === 'L';
+    return playsPosition(player, 'L');
 }
 
 /* ------------------------------------------------------------------ stats */

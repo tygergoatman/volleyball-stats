@@ -17,7 +17,7 @@
  * lineup. `assignRoles` maps them onto actual people.
  */
 
-import { rotateLineupBy } from './model.js';
+import { primaryPosition, rotateLineupBy } from './model.js';
 
 export const DEFAULT_SYSTEM = '6-2';
 
@@ -56,6 +56,23 @@ export const ROLE_POSITION = {
  * the game rather than the lineup being wrong.
  */
 export const SPECIALIST_POSITIONS = ['L', 'DS'];
+
+/**
+ * Whether a player should be labelled by their own position rather than by the
+ * role of the slot they are standing in.
+ *
+ * The test is "specialist and *nothing else*", not "specialist somewhere in the
+ * list". A pure libero or pure DS never carries a 6-2 role, so their own tag
+ * wins. But a player tagged OH and DS is a hitter who also covers back row —
+ * she does rotate through the six roles, and calling her "DS" while she is
+ * standing in an outside slot would hide the thing the court is there to show.
+ *
+ * @param {object|undefined} player
+ */
+export function isSpecialist(player) {
+    const positions = player?.positions ?? [];
+    return positions.length > 0 && positions.every((p) => SPECIALIST_POSITIONS.includes(p));
+}
 
 export const ROLE_LABEL = {
     S1: 'S1',
@@ -172,6 +189,25 @@ export const POSITION_POINT = {
     1: { x: 0.83, y: 0.72 },
 };
 
+/**
+ * The two states of the serve-receive view: the passing formation, and where
+ * everyone ends up once the ball is up.
+ *
+ * "After pass" is not a fourth court — it resolves to an arrangement the app
+ * already draws. For most rotations that is Base. For the rotations the sheets
+ * mark as no-switch it is the rotational arrangement, because leaving the front
+ * row where it receives *is* the rotation. Resolving rather than storing keeps
+ * the two in step: correct Base and this follows.
+ */
+export const RECEIVE_STAGES = [
+    { key: 'receive', label: 'Receive' },
+    { key: 'afterReceive', label: 'After pass' },
+];
+
+export function afterReceiveFormation(rotation, system = DEFAULT_SYSTEM) {
+    return keepsFrontRowOnReceive(rotation, system) ? 'rotation' : 'base';
+}
+
 export const FORMATIONS = [
     { key: 'rotation', label: 'Rotation', note: 'Legal rotational positions' },
     { key: 'base', label: 'Base', note: 'Where each position plays once the ball is live' },
@@ -219,18 +255,20 @@ export function assignRoles(lineup = [], rotation = 1, playerLookup = () => unde
 
         // A libero or defensive specialist is shown as what they are rather
         // than as the hitter they replaced, and is never a mismatch.
-        if (SPECIALIST_POSITIONS.includes(player?.position)) {
-            roleOf[playerId] = player.position;
+        if (isSpecialist(player)) {
+            roleOf[playerId] = primaryPosition(player);
             continue;
         }
 
         roleOf[playerId] = role;
 
         const expected = ROLE_POSITION[role];
-        // An untagged player says nothing either way; only a stated position
-        // that contradicts the slot is worth raising.
-        if (player?.position && expected && player.position !== expected) {
-            mismatches.push({ playerId, role, expected, actual: player.position });
+        // An untagged player says nothing either way, and a player who plays
+        // the slot's position among others is not a contradiction — only a
+        // stated position list with no room for this slot is worth raising.
+        const positions = player?.positions ?? [];
+        if (positions.length > 0 && expected && !positions.includes(expected)) {
+            mismatches.push({ playerId, role, expected, actual: positions.join('/') });
         }
     }
 
@@ -301,6 +339,16 @@ export function formationPoints({
     system = DEFAULT_SYSTEM,
     playerLookup = () => undefined,
 }) {
+    if (formation === 'afterReceive') {
+        return formationPoints({
+            lineup,
+            rotation,
+            formation: afterReceiveFormation(rotation, system),
+            system,
+            playerLookup,
+        });
+    }
+
     const points = {};
 
     if (formation === 'receive') {
