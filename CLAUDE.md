@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.19b** (`js/version.js`).
+Current version: **2026.08.20a** (`js/version.js`).
 
 ## What this is
 
@@ -412,6 +412,55 @@ Two deliberate limits:
 
 The Roster tab opens filtered to that team, once per session, so it comes back where it was left.
 After that, clearing the filter sticks for as long as the tab is in use.
+
+## Layering and scrolling — the installed-app bugs
+
+Reported as "the bottom bar disappears when I scroll" plus "the bubble overlaps the stat pop-up and
+the court scrolls behind it". Two of the three were real and reproducible; all three are worth
+knowing about because none of them can be seen in a desktop browser without looking for them.
+
+**Bubbles painted through the open stat sheet, and stayed tappable.** Each bubble carries an inline
+`z-index` derived from how deep it stands, so an overlapped bubble keeps its own edge to tap — and
+those values reached 100 against a scrim at 50. `.court__grid` had `position: relative` with no
+`z-index`, so it was **not** a stacking context and court coordinates competed directly with app
+chrome. Back-row players sat on top of the sheet and `elementFromPoint` returned the bubble, meaning
+a tap aimed at a stat could reopen a different player instead — a silent mis-record mid-game.
+
+Fixed with `isolation: isolate` on `.court__grid`, which scopes bubble depth to itself without
+touching layout, plus a named layer scale in `:root` (`--z-tabs: 10`, `--z-scrim: 100`,
+`--z-toast: 200`) so the next person does not have to reverse-engineer the order. Verified the FLIP
+animation still tweens afterwards — a new stacking context was the obvious thing to have broken.
+
+**`body.sheet-open { overflow: hidden }` was locking the wrong element.** `#view` is the scroller,
+not the body, so the court kept scrolling behind an open sheet. Now `body.sheet-open .view` is locked
+too. Two things a test has to check here, because getting either wrong is worse than the bug: the
+scroll position must survive both opening **and** closing, or every stat tap would jerk the court.
+
+A trap when testing this: setting `view.scrollTop` from script bypasses `overflow: hidden` by design,
+so it proves nothing. Scroll with a real wheel or touch gesture over the background.
+
+**The tab bar in the installed app is unconfirmed.** It could not be reproduced in a browser or under
+device emulation — the bar stayed pinned on all five tabs, scrolled to the bottom, with zero body
+overflow. It only happens installed to the home screen, which rules out the URL bar. The most likely
+mechanism left is **overscroll chaining**: `overscroll-behavior: none` sits on `html`/`body`, but
+chaining is governed by the _scroller's_ own value, and `#view` had none — so over-dragging the court
+chained to the viewport. In a browser tab nothing moves, because the body already fits; in standalone
+there is no browser chrome to absorb it and the whole app can be panned. `#view` now has
+`overscroll-behavior: contain`.
+
+Hardening shipped alongside, all cheap and independent of that diagnosis:
+
+- `.tabs` is `position: sticky; bottom: 0` — a no-op while the body cannot scroll, and insurance if it
+  ever can.
+- `.view` states `min-height: 0`. It is only correct today because `overflow-y: auto` happens to zero
+  out a grid item's automatic minimum size; saying it outright means a later change cannot quietly
+  reintroduce a page-level scroll.
+- `--safe-b` is `max(env(safe-area-inset-bottom, 0px), 6px)`. Android frequently reports no inset
+  where iOS reports a real one, and installed there is no browser chrome under the bar.
+
+**Not done: pushing the court up above the sheet.** The stat sheet is up to `88dvh`, so there is no
+room to show the court beside it, and the sheet title already names the player being recorded. If
+seeing the court during capture matters, the lever is the sheet's `max-height`, not scrolling.
 
 ## Pre-season review findings (2026.08.15c)
 

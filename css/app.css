@@ -24,7 +24,23 @@
 
     --radius: 14px;
     --tap: 48px;
-    --safe-b: env(safe-area-inset-bottom, 0px);
+    /* Never flush against a gesture bar: Android often reports no inset at all
+       where iOS reports a real one, and in an installed app there is no browser
+       chrome underneath to save you. */
+    --safe-b: max(env(safe-area-inset-bottom, 0px), 6px);
+
+    /* Stacking order, in one place so nothing has to guess.
+
+       The bug this exists to prevent: court bubbles carry an inline z-index
+       derived from how deep they stand, so an overlapped bubble keeps its own
+       tappable edge — and those values reached 100, above a sheet scrim sitting
+       at 50. Back-row players painted straight *through* an open stat sheet and
+       stayed tappable, so a tap meant for a stat could reopen another player.
+       Bubble depth is now scoped by `isolation` on the court and competes only
+       with itself; these three are the app's own layers. */
+    --z-tabs: 10;
+    --z-scrim: 100;
+    --z-toast: 200;
 }
 
 * {
@@ -56,7 +72,11 @@ body {
     touch-action: manipulation;
 }
 
-body.sheet-open {
+/* `#view` is the scroller, not the body, so locking the body did nothing and
+   the court kept scrolling behind an open sheet. Lock the element that actually
+   scrolls. */
+body.sheet-open,
+body.sheet-open .view {
     overflow: hidden;
 }
 
@@ -123,6 +143,15 @@ button:disabled {
 .view {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    /* A grid item's automatic minimum size is its content, which would push the
+       body past the viewport and let the whole page scroll — taking the tab bar
+       with it. `overflow-y: auto` happens to zero it out already; saying it
+       outright means a later style change cannot quietly bring that back. */
+    min-height: 0;
+    /* Stop an over-drag here rather than letting it chain to the document. In
+       an installed app there is no browser chrome to absorb it, and the whole
+       view can be panned. */
+    overscroll-behavior: contain;
     padding: 10px 10px 16px;
     display: flex;
     flex-direction: column;
@@ -131,6 +160,12 @@ button:disabled {
 
 .tabs {
     display: grid;
+    /* It is already the bottom row of a viewport-height grid, so this changes
+       nothing today — and guarantees the bar stays put if the body ever does
+       gain a scroll. */
+    position: sticky;
+    bottom: 0;
+    z-index: var(--z-tabs);
     /* One equal column per tab, whatever the count — a hardcoded number wrapped
        the bar onto a second row the moment a fifth tab arrived. */
     grid-auto-flow: column;
@@ -307,6 +342,11 @@ button:disabled {
 .court__grid {
     position: relative;
     aspect-ratio: 3 / 2.15;
+    /* Keep bubble depth to itself. Each bubble's z-index says how deep it
+       stands so an overlapped one still has an edge to tap — but those are
+       court coordinates, not app layers, and without this they competed with
+       the sheet scrim and won. */
+    isolation: isolate;
 }
 
 .court--setup .court__grid {
@@ -868,7 +908,7 @@ button:disabled {
 .scrim {
     position: fixed;
     inset: 0;
-    z-index: 50;
+    z-index: var(--z-scrim);
     display: flex;
     align-items: flex-end;
     background: rgba(0, 0, 0, 0.55);
@@ -1531,7 +1571,7 @@ button:disabled {
     left: 50%;
     top: calc(env(safe-area-inset-top, 0px) + 56px);
     transform: translate(-50%, -12px);
-    z-index: 60;
+    z-index: var(--z-toast);
     max-width: calc(100vw - 32px);
     padding: 10px 16px;
     border-radius: 999px;
