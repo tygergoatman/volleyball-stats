@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.20a** (`js/version.js`).
+Current version: **2026.08.20b** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 218 tests, all pure modules
+node --test "tests/*.test.js"                          # 222 tests, all pure modules
 ```
 
 **Run it in a browser before claiming anything works.** Every bug that reached the user was invisible
@@ -194,6 +194,35 @@ than a bare `L`, since `L` alone would be ambiguous.
 
 Sets recorded before `kind` existed fall back to "was a libero involved", which gets old data close
 but not exact.
+
+## The front-row setter is the opposite
+
+`ROLE_POSITION` maps `S1`/`S2` to `S`, and that is only half true. **A 6-2 is six attackers and two
+setters**: only the back-row setter sets, and the front-row one plays opposite. So a setter slot
+standing in the front row is the right-side attack, not a setting position.
+
+`roleExpectations(role, isFrontRow)` in `formations.js` says what a slot means for the row it is in —
+the label to show, and every roster position that legitimately fills it:
+
+| slot         | label | allowed    |
+| ------------ | ----- | ---------- |
+| S1/S2 back   | S1/S2 | S          |
+| S1/S2 front  | OPP   | OPP _or_ S |
+| OH/MB either | as-is | as-is      |
+
+Both are allowed in the front because both happen: a true opposite subbed in for the setter who has
+rotated front is the textbook 6-2 move, and a setter who rotates front and hits is equally ordinary.
+
+**Reported from a real match**: an OPP came in for the front-row setter, and the court labelled her
+`S1` and warned "#8 Ella is OPP, expected S at S1". Both wrong, and wrong in the same way the libero
+once was — the app misreading its own system rather than the lineup being wrong. This is the third
+time row-blindness has produced a false warning (libero, multi-position players, now the opposite),
+which is why `FRONT_ROW` now reaches into `assignRoles` as well as into the colours.
+
+**The check keeps its teeth in the back row.** An opposite standing in the _back-row_ setter slot is
+still flagged, because she cannot run the offence from there — and that warning is useful: it says
+swap her out before she rotates round. A test walks all six rotations and asserts three quiet ones
+and three flagged.
 
 ## Formations (Court tab)
 
@@ -413,11 +442,11 @@ Two deliberate limits:
 The Roster tab opens filtered to that team, once per session, so it comes back where it was left.
 After that, clearing the filter sticks for as long as the tab is in use.
 
-## Layering and scrolling — the installed-app bugs
+## Layering and scrolling — the installed-app bugs (fixed in 2026.08.20a)
 
 Reported as "the bottom bar disappears when I scroll" plus "the bubble overlaps the stat pop-up and
-the court scrolls behind it". Two of the three were real and reproducible; all three are worth
-knowing about because none of them can be seen in a desktop browser without looking for them.
+the court scrolls behind it". All three turned out to be real, and all three are worth keeping,
+because none of them shows up in a desktop browser unless you go looking.
 
 **Bubbles painted through the open stat sheet, and stayed tappable.** Each bubble carries an inline
 `z-index` derived from how deep it stands, so an overlapped bubble keeps its own edge to tap — and
@@ -439,14 +468,22 @@ scroll position must survive both opening **and** closing, or every stat tap wou
 A trap when testing this: setting `view.scrollTop` from script bypasses `overflow: hidden` by design,
 so it proves nothing. Scroll with a real wheel or touch gesture over the background.
 
-**The tab bar in the installed app is unconfirmed.** It could not be reproduced in a browser or under
-device emulation — the bar stayed pinned on all five tabs, scrolled to the bottom, with zero body
-overflow. It only happens installed to the home screen, which rules out the URL bar. The most likely
-mechanism left is **overscroll chaining**: `overscroll-behavior: none` sits on `html`/`body`, but
-chaining is governed by the _scroller's_ own value, and `#view` had none — so over-dragging the court
-chained to the viewport. In a browser tab nothing moves, because the body already fits; in standalone
-there is no browser chrome to absorb it and the whole app can be panned. `#view` now has
-`overscroll-behavior: contain`.
+**The tab bar was overscroll chaining, and `overscroll-behavior: contain` on `#view` fixed it** —
+confirmed by the owner on the installed app in 2026.08.20a.
+
+Worth keeping, because the diagnosis was not reachable from a desktop browser. It could not be
+reproduced there or under device emulation: the bar stayed pinned on all five tabs, scrolled to the
+bottom, with zero body overflow. Two facts narrowed it. It happened **only** installed to the home
+screen, which ruled out the URL bar. And `overscroll-behavior: none` was already set on `html`/`body`,
+which looks like it covers this but does not — **chaining is governed by the scroller's own value**,
+and `#view`, the element that actually scrolls, had none. So over-dragging the court chained up to the
+viewport. In a browser tab nothing visibly moves because the body already fits; installed, there is no
+browser chrome to absorb it and the whole app pans, tab bar included.
+
+Two lessons: `overscroll-behavior` belongs on the element that scrolls, not on its ancestors; and a
+standalone PWA is a genuinely different environment, not just a browser tab without a URL bar. Device
+emulation does not model it, so a report that only reproduces installed should be believed rather than
+chased in Chromium.
 
 Hardening shipped alongside, all cheap and independent of that diagnosis:
 

@@ -154,6 +154,11 @@ Liberos and defensive specialists are the exception: they exist to replace someb
 shown as **L** or **DS** rather than as the hitter whose spot they took, and they never trip the
 "this doesn't look like a 6-2" warning.
 
+**The front-row setter shows as OPP.** In a 6-2 only the back-row setter sets — the other plays
+opposite — so that slot is labelled for the job it is doing, and both a true opposite and a setter who
+has rotated front belong there without a warning. If an opposite ends up in the _back-row_ setter slot
+you will still get flagged, which is your cue to swap her out before she rotates round.
+
 **Switching view never changes anything legal.** The position number on each bubble and the serve
 ring always follow the player's real rotational position, so a formation can't hide an overlap or
 mislead you about who is serving. Tapping still records against the player.

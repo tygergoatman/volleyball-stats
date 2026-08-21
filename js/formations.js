@@ -17,7 +17,7 @@
  * lineup. `assignRoles` maps them onto actual people.
  */
 
-import { primaryPosition, rotateLineupBy } from './model.js';
+import { FRONT_ROW, primaryPosition, rotateLineupBy } from './model.js';
 
 export const DEFAULT_SYSTEM = '6-2';
 
@@ -35,7 +35,14 @@ export const SERVING_ORDER_ROLES = {
     '6-2': ['S1', 'OH1', 'MB1', 'S2', 'OH2', 'MB2'],
 };
 
-/** Which roster position each role is expected to be. */
+/**
+ * Which roster position each role is expected to be.
+ *
+ * The setter slots are row-dependent and that is the whole point of a 6-2:
+ * **six attackers and two setters**, where only the back-row setter sets and the
+ * front-row one plays opposite. So a setter slot in the front row is the
+ * opposite position, not a setting position — see `roleExpectations`.
+ */
 export const ROLE_POSITION = {
     S1: 'S',
     S2: 'S',
@@ -44,6 +51,32 @@ export const ROLE_POSITION = {
     MB1: 'MB',
     MB2: 'MB',
 };
+
+/** Roles that set from the back and hit opposite from the front. */
+const SETTER_ROLES = ['S1', 'S2'];
+
+/**
+ * What a role means for the row it is currently standing in: the label to show,
+ * and every roster position that legitimately fills it.
+ *
+ * A front-row setter slot reads **OPP**, because that is the job — right-side
+ * attacker. Both `OPP` and `S` belong there: a true opposite subbed in for the
+ * setter is the textbook 6-2 move, and a setter who rotates front and hits is
+ * equally normal. Labelling that slot "S1" and then warning that an opposite
+ * standing in it is not a setter was the app misreading its own system, the
+ * same way it once mislabelled the libero.
+ *
+ * @param {string} role
+ * @param {boolean} isFrontRow
+ * @returns {{label: string, allowed: string[]}}
+ */
+export function roleExpectations(role, isFrontRow) {
+    if (SETTER_ROLES.includes(role) && isFrontRow) {
+        return { label: 'OPP', allowed: ['OPP', 'S'] };
+    }
+    const expected = ROLE_POSITION[role];
+    return { label: role, allowed: expected ? [expected] : [] };
+}
 
 /**
  * Positions that exist to replace somebody else, so they never carry one of the
@@ -260,15 +293,23 @@ export function assignRoles(lineup = [], rotation = 1, playerLookup = () => unde
             continue;
         }
 
-        roleOf[playerId] = role;
+        // What this slot means depends on the row it is standing in: a setter
+        // slot in the front row is the opposite, and is labelled and checked
+        // as one.
+        const { label, allowed } = roleExpectations(role, FRONT_ROW.includes(position));
+        roleOf[playerId] = label;
 
-        const expected = ROLE_POSITION[role];
         // An untagged player says nothing either way, and a player who plays
         // the slot's position among others is not a contradiction — only a
         // stated position list with no room for this slot is worth raising.
         const positions = player?.positions ?? [];
-        if (positions.length > 0 && expected && !positions.includes(expected)) {
-            mismatches.push({ playerId, role, expected, actual: positions.join('/') });
+        if (positions.length > 0 && allowed.length > 0 && !allowed.some((p) => positions.includes(p))) {
+            mismatches.push({
+                playerId,
+                role: label,
+                expected: allowed.join(' or '),
+                actual: positions.join('/'),
+            });
         }
     }
 
