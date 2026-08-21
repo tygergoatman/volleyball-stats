@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.20b** (`js/version.js`).
+Current version: **2026.08.21a** (`js/version.js`).
 
 ## What this is
 
@@ -18,8 +18,13 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 222 tests, all pure modules
+node --test "tests/*.test.js"                          # 228 tests, all pure modules
 ```
+
+**Three bugs in a row now have reproduced only in the installed app**, never in Chromium or device
+emulation: the drifting tab bar, then the tab bar covering content. A standalone PWA can have a layout
+viewport taller than the visible one, and nothing local models that. So: fix the diagnosed cause, do
+not bundle in unverifiable "while we're here" hardening, and say plainly which parts are confirmed.
 
 **Run it in a browser before claiming anything works.** Every bug that reached the user was invisible
 to the unit tests: an `el()` parsing bug that silently broke every toast, a five-tab bar wrapping onto
@@ -485,13 +490,27 @@ standalone PWA is a genuinely different environment, not just a browser tab with
 emulation does not model it, so a report that only reproduces installed should be believed rather than
 chased in Chromium.
 
-Hardening shipped alongside, all cheap and independent of that diagnosis:
+**The `position: sticky` "insurance" was a regression, and is gone (2026.08.21a).** It was added to
+`.tabs` alongside the real fix, with a comment saying it changed nothing today. It did: installed to
+the home screen it lifted the bar out of its grid row and parked it over the bottom of the page, so
+the last of the content could not be reached. The mechanism is the same viewport split as above — the
+layout viewport is taller than the visible one, so sticking to the _scrollport's_ bottom means sitting
+above the grid row's bottom, on top of `.view`.
 
-- `.tabs` is `position: sticky; bottom: 0` — a no-op while the body cannot scroll, and insurance if it
-  ever can.
+Two lessons, and the second is the general one:
+
+- The grid row is what places the tab bar. Nothing else should — `tests/layout.test.js` now fails if
+  `position` comes back on `.tabs`.
+- **Do not ship speculative CSS hardening into an environment you cannot test.** "This is a no-op
+  today" is a claim about a renderer, and it was checked in Chromium, where it was true. Fix the
+  diagnosed cause and stop; if a guard cannot be verified where the bug lives, it is not a guard.
+
+Hardening kept, because each was verified rather than assumed:
+
 - `.view` states `min-height: 0`. It is only correct today because `overflow-y: auto` happens to zero
   out a grid item's automatic minimum size; saying it outright means a later change cannot quietly
   reintroduce a page-level scroll.
+- `.view` has `overscroll-behavior: contain`, which is the change that actually fixed the drifting bar.
 - `--safe-b` is `max(env(safe-area-inset-bottom, 0px), 6px)`. Android frequently reports no inset
   where iOS reports a real one, and installed there is no browser chrome under the bar.
 
@@ -560,6 +579,23 @@ are plausibly two points. Undo is the remedy.
 
 **Drag-and-drop upload adds and overwrites but never deletes.** If a change removes or renames a
 file, the old one stays in the repo and keeps being served. Flag which files to delete by hand.
+
+### Always hand over release notes with the zip
+
+The owner asked for this as a standing habit, so every package comes with a short bulleted list —
+in the reply, not a file. What it is for: deciding whether to install now or after the next match,
+and knowing what to look at once it is on the phone.
+
+- **Lead with what changed on screen**, in the owner's words, not the code's. "The front-row setter
+  now reads OPP" beats "row-aware `roleExpectations`".
+- **Say which are fixes and which are new.** A fix means "something you reported is gone"; a feature
+  means "there is something new to try".
+- **Flag anything needing action** — a new file to upload, a file to delete, a behaviour to confirm on
+  the phone, or a decision left open. This is the part that is genuinely costly to omit.
+- **Keep the reasoning out of it.** Design rationale belongs here and in the reply's prose; the list
+  is the scannable summary, so a handful of lines is right.
+- **Name the version and say what it replaces**, since two zips a day happen and installing the older
+  one silently undoes work.
 
 ## Open work
 

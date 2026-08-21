@@ -160,11 +160,14 @@ button:disabled {
 
 .tabs {
     display: grid;
-    /* It is already the bottom row of a viewport-height grid, so this changes
-       nothing today — and guarantees the bar stays put if the body ever does
-       gain a scroll. */
-    position: sticky;
-    bottom: 0;
+    /* Deliberately NOT positioned. `position: sticky; bottom: 0` was added here
+       as "insurance that changes nothing today" and it was not free: installed
+       to the home screen it lifted the bar out of its own grid row and parked it
+       over the bottom of the page, so the last of the content could not be
+       reached. The grid already puts this at the bottom of the viewport; what
+       actually stopped the bar drifting was `overscroll-behavior` on the
+       scroller. Do not add sticky or fixed back.
+       z-index still applies — a grid item takes it without being positioned. */
     z-index: var(--z-tabs);
     /* One equal column per tab, whatever the count — a hardcoded number wrapped
        the bar onto a second row the moment a fifth tab arrived. */
