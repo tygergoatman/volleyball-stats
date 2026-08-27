@@ -4,6 +4,8 @@ import {
     aggregate,
     aggregateMatch,
     aggregateSeason,
+    breakdownForSets,
+    breakdownTotals,
     derive,
     emptyLine,
     formatAvg,
@@ -19,7 +21,10 @@ import { el, mount, toast, downloadText } from './dom.js';
  * applies to the season scope — set and match scopes take their team from the
  * open match.
  */
-const view = { scope: 'set', category: 'pass', teamId: null };
+const view = { scope: 'set', category: 'pass', teamId: null, sort: null };
+
+/** The player column's heading, which sorts by jersey number rather than a stat. */
+const PLAYER_COLUMN = 'Player';
 
 const CATEGORIES = [
     { key: 'pass', label: 'Pass' },
@@ -118,6 +123,8 @@ export function renderStats(root, store) {
             el('p.panel__hint', { text: scopeLabel }),
         ]),
 
+        pointsPanel(store, sets),
+
         el('section.panel', {}, [
             el(
                 'div.segmented.segmented--wrap',
@@ -129,6 +136,10 @@ export function renderStats(root, store) {
                         text: category.label,
                         onClick: () => {
                             view.category = category.key;
+                            // Columns differ per family, so a sort chosen on one
+                            // cannot mean anything on the next. Back to that
+                            // family's own default.
+                            view.sort = null;
                             store.commit();
                         },
                     }),
@@ -159,6 +170,107 @@ export function renderStats(root, store) {
         ]),
     );
     return root;
+}
+
+/* ------------------------------------------------ where the points went */
+
+/**
+ * Every point split four ways: earned by us, given to us, earned by them, given
+ * away by us.
+ *
+ * The one the coach asked for is **points we gave up in errors** — so that half
+ * of the panel names which errors, not just how many. "We lost by six and gave
+ * away eleven" is a different conversation from "they outplayed us".
+ *
+ * Both totals come from the same `pointFor` the scoreboard replays, so the two
+ * numbers here always add up to the score on the Court tab.
+ */
+function pointsPanel(store, sets) {
+    const breakdown = breakdownForSets(sets);
+    const totals = breakdownTotals(breakdown);
+
+    if (totals.us + totals.them === 0) {
+        return el('section.panel', {}, [
+            el('h2.panel__title', { text: 'Points' }),
+            el('p.panel__hint', { text: 'No points recorded in this scope yet.' }),
+        ]);
+    }
+
+    const pct = (share) => (share === null ? '—' : `${Math.round(share * 100)}%`);
+
+    return el('section.panel', {}, [
+        el('div.panel__head', {}, [
+            el('h2.panel__title', { text: 'Points' }),
+            el('span.panel__meta', { text: `${totals.us}–${totals.them}` }),
+        ]),
+
+        el('div.pointsplit', {}, [
+            splitRow({
+                label: store.activeTeam?.name ?? 'Us',
+                side: 'us',
+                earned: breakdown.us.earned,
+                given: breakdown.us.fromTheirErrors,
+                earnedLabel: 'earned',
+                givenLabel: 'their errors',
+            }),
+            splitRow({
+                label: 'Them',
+                side: 'them',
+                earned: breakdown.them.earned,
+                given: breakdown.them.fromOurErrors,
+                earnedLabel: 'earned',
+                givenLabel: 'our errors',
+            }),
+        ]),
+
+        el('p.panel__hint', {
+            text: `${pct(totals.usEarnedShare)} of our points were earned. ${pct(
+                totals.themGivenShare,
+            )} of theirs came from our errors.`,
+        }),
+
+        countList('We gave away', breakdown.them.fromOurErrors, totals.errorsBy, 'is-bad'),
+        countList('We earned', breakdown.us.earned, totals.earnedBy, 'is-good'),
+    ]);
+}
+
+/** One team's points as a two-segment bar: earned, then handed over. */
+function splitRow({ label, side, earned, given, earnedLabel, givenLabel }) {
+    const total = earned + given;
+    const share = (n) => (total > 0 ? `${(n / total) * 100}%` : '0%');
+
+    return el('div.pointsplit__row', {}, [
+        el('span.pointsplit__team', { text: label }),
+        // The bar carries proportion only; the counts live in the legend below.
+        // A lopsided split (20 earned, 1 given) leaves a segment a few pixels
+        // wide, and a digit inside it would be clipped to nonsense.
+        el('div.pointsplit__bar', { role: 'img', 'aria-label': `${earned} ${earnedLabel}, ${given} ${givenLabel}` }, [
+            earned > 0 && el(`span.pointsplit__seg.pointsplit__seg--${side}`, { style: `width:${share(earned)}` }),
+            given > 0 && el('span.pointsplit__seg.pointsplit__seg--given', { style: `width:${share(given)}` }),
+        ]),
+        el('span.pointsplit__legend', { text: `${earned} ${earnedLabel} · ${given} ${givenLabel}` }),
+    ]);
+}
+
+/** A short "what made it up" list, commonest first. */
+function countList(title, total, rows, tone) {
+    if (rows.length === 0) return null;
+    return el('div.countlist', {}, [
+        el('div.countlist__head', {}, [
+            el('span.countlist__title', { text: title }),
+            el('span.countlist__total', { class: tone, text: String(total) }),
+        ]),
+        el(
+            'ul.countlist__rows',
+            {},
+            rows.map((row) =>
+                el('li.countlist__row', {}, [
+                    el('span.countlist__name', { text: row.name }),
+                    el('span.countlist__count', { text: String(row.count) }),
+                ]),
+            ),
+        ),
+    ]);
 }
 
 /** Gather the stat lines and sets that match the selected scope. */
@@ -242,7 +354,23 @@ function statTable(store, lines) {
     }
 
     const primary = columns.find((column) => column.primary) ?? columns[0];
-    rows.sort((a, b) => sortValue(primary, b) - sortValue(primary, a));
+    const active = columns.find((column) => column.label === view.sort?.label) ?? null;
+    const byPlayer = view.sort?.label === PLAYER_COLUMN;
+    const dir = view.sort?.dir === 'asc' ? 1 : -1;
+
+    if (byPlayer) {
+        // Jersey order, so "who is on this list" is answerable as well as
+        // "who leads it". Unnumbered players sort last either way.
+        rows.sort((a, b) => dir * (jerseyValue(a.player) - jerseyValue(b.player)));
+    } else {
+        const column = active ?? primary;
+        // Ties keep the default column's order underneath, so a table sorted by
+        // a column where half the squad has 0 is still readable.
+        rows.sort(
+            (a, b) =>
+                dir * (sortValue(column, a) - sortValue(column, b)) || sortValue(primary, b) - sortValue(primary, a),
+        );
+    }
 
     const team = totalLine(rows.map((row) => row.line));
     const teamDerived = derive(team);
@@ -251,8 +379,8 @@ function statTable(store, lines) {
         el('table.stattable', {}, [
             el('thead', {}, [
                 el('tr', {}, [
-                    el('th.stattable__player', { text: 'Player' }),
-                    ...columns.map((column) => el('th', { text: column.label })),
+                    sortableHeader(store, { label: PLAYER_COLUMN, className: 'stattable__player' }),
+                    ...columns.map((column) => sortableHeader(store, { label: column.label })),
                 ]),
             ]),
             el(
@@ -281,6 +409,46 @@ function statTable(store, lines) {
             ]),
         ]),
     ]);
+}
+
+/**
+ * A tappable column heading.
+ *
+ * First tap on a column sorts it **descending**, because every question this
+ * table answers is "who leads" — most 3-passes, best hitting percentage. Tapping
+ * the active column flips it, which is how you find who needs the work.
+ *
+ * The heading stays a `<th>` with a button inside rather than becoming one: the
+ * player column is `position: sticky` so it survives horizontal scrolling, and
+ * that only works on the cell.
+ */
+function sortableHeader(store, { label, className = '' }) {
+    const isActive = view.sort?.label === label;
+    const dir = isActive ? view.sort.dir : null;
+
+    return el('th', { class: className, 'aria-sort': dir === 'asc' ? 'ascending' : dir ? 'descending' : 'none' }, [
+        el(
+            'button.sorthead',
+            {
+                type: 'button',
+                class: isActive ? 'sorthead--on' : '',
+                onClick: () => {
+                    view.sort = isActive && view.sort.dir === 'desc' ? { label, dir: 'asc' } : { label, dir: 'desc' };
+                    store.commit();
+                },
+            },
+            [
+                el('span.sorthead__label', { text: label }),
+                el('span.sorthead__arrow', { text: isActive ? (dir === 'asc' ? '▲' : '▼') : '' }),
+            ],
+        ),
+    ]);
+}
+
+/** Jersey number for sorting. Unnumbered players go last, either direction. */
+function jerseyValue(player) {
+    const number = Number.parseInt(player.number, 10);
+    return Number.isNaN(number) ? Number.MAX_SAFE_INTEGER : number;
 }
 
 function sortValue(column, row) {

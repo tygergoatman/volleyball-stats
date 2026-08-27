@@ -265,6 +265,25 @@ them later. Substitutions cannot be edited in place; delete and re-record them f
 Whole sets can be deleted from the Log tab, which also renumbers what is left and re-targets the
 new deciding set.
 
+### Points: earned vs given away
+
+The Stats tab opens with where the points actually went, for whichever scope you have selected:
+
+- **How many we earned** — kills, aces, solo blocks — against how many came from their errors.
+- **How many they earned** against **how many we gave them**, with a list naming which errors.
+
+The bar shows the split at a glance and the lists say what made it up, commonest first. The totals
+always match the score on the Court tab, because both are counted the same way.
+
+### Sorting the table
+
+Tap any column heading to rank by it — most perfect passes, best hitting percentage, most service
+errors. The first tap puts the leader on top; tap the same heading again to flip it and see who needs
+the work. Tap **Player** to go back to jersey order.
+
+Switching between Pass / Attack / Set / Serve / Block-Dig resets to that group's usual sort, since the
+columns are different.
+
 ### Stats captured
 
 Rows appear in this order, top to bottom, so the most frequent taps sit highest:

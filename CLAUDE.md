@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.21a** (`js/version.js`).
+Current version: **2026.08.22b** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 228 tests, all pure modules
+node --test "tests/*.test.js"                          # 236 tests, all pure modules
 ```
 
 **Three bugs in a row now have reproduced only in the installed app**, never in Chromium or device
@@ -425,6 +425,65 @@ not re-ask every rally in between.
 - Libero replacements are unlimited, so the "costs N of 15" note counts scheduled subs only — the
   same rule the tracking sheet enforces.
 
+## Points earned vs given away (Stats tab)
+
+Every point splits four ways, and the split is the whole feature:
+
+| bucket               | what it is                                    | source            |
+| -------------------- | --------------------------------------------- | ----------------- |
+| `us.earned`          | kill, ace, solo block — we finished the rally | our stats, `us`   |
+| `us.fromTheirErrors` | they put it away themselves                   | `oppError`        |
+| `them.earned`        | they finished it and we recorded no error     | `oppPoint`        |
+| `them.fromOurErrors` | serve into the net, attack out, shank         | our stats, `them` |
+
+**`them.fromOurErrors` is the number the coach asked for**, which is why that half of the panel names
+_which_ errors rather than only counting them. "We gave away eleven" is a fact; "six of them serves"
+is a practice plan. Both lists are sorted commonest-first for the same reason.
+
+**The winner of each point comes from `pointFor`** — the same function `computeSetState` replays for
+the scoreboard. That is deliberate and load-bearing: it means the panel and the Court tab can never
+tell the coach two different stories. A test asserts the totals equal the replayed score, and it
+would fail immediately if someone re-implemented the mapping here.
+
+Nothing is stored. `breakdownForSets` folds set / match / season through one accumulator, so the three
+scopes cannot disagree either.
+
+Display notes:
+
+- **The bar carries proportion only; the counts live in the legend.** Counts were inside the segments
+  first — a lopsided split (20 earned, 1 given) leaves a segment a few pixels wide and clips the digit
+  to nonsense.
+- Points that changed hands without being earned use the same grey on both bars, so "given away"
+  reads as one idea whichever side received them.
+- Shares are `null` rather than `0` with no points yet, so the UI shows "—" instead of a confident 0%.
+
+Still not tracked, and out of scope by choice: opponent stats beyond these two team events. `oppPoint`
+means "they won the rally and we did not record why", not a claim about how.
+
+## Sortable stat columns
+
+Tap any column heading to rank by it. First tap sorts **descending**, because every question this
+table answers is "who leads" — most 3-passes, best hitting percentage. Tapping the active column
+flips it, which is how you find who needs the work.
+
+Details that matter:
+
+- **The heading is a `<button>` inside the `<th>`, not the `th` itself.** The player column is
+  `position: sticky` so it survives the table's horizontal scroll, and sticky only works on the cell.
+  A browser test asserts it is still sticky after the change.
+- **Ties fall back to the category's default column**, so a table sorted by a stat where half the
+  squad has 0 still reads sensibly underneath.
+- **The Player heading sorts by jersey number**, which answers "who is on this list" rather than "who
+  leads it". Unnumbered players sort last in both directions.
+- **Changing stat family clears the sort.** Columns differ per family, so a choice made on one cannot
+  mean anything on the next; you get that family's own default back.
+- Rates already sort by their raw value rather than the formatted string (`sort:` on the column), so
+  "—" for no attempts lands last instead of parsing as something.
+- `aria-sort` is set on the active `th`.
+
+**Not done:** the CSV export ignores the on-screen sort — it always writes roster order. Worth doing
+if the owner asks, but sorting a spreadsheet is trivial, so it did not seem worth the coupling.
+
 ## The team in context
 
 `state.activeTeamId` is the app's answer to "whose roster, whose plan, whose next match", and it is
@@ -617,13 +676,46 @@ Design cautions, learned from the substitution arming that used to live on this 
 - Serve-receive is the concrete case. Resist generalising to all five stat groups until it is proven,
   or the court fills with buttons and the fast path gets slower.
 
-### 2. Floor captain — the `c` (spec known, deliberately not built)
+### 2. A calendar of games (owner's idea, not designed with them yet)
+
+Raised as "insert calendar of games" and nothing more, so treat the shape below as a starting point
+rather than a spec — ask before building.
+
+The obvious payoff is at **New Match**: instead of typing an opponent name courtside, tap tonight's
+fixture and get opponent, date, venue and home/away pre-filled. Right now every match is created from
+scratch, which is a keyboard on a phone in a loud gym.
+
+**A schedule is _input_**, like the roster and the game plan — stored per team, not derived, and
+storing it does not break the rule that score, rotation and lineup are always derived.
+
+**Keep a fixture and a match separate.** A match started from a fixture carries its id; it does not
+_become_ the fixture. Games get postponed, cancelled, or played when they were never on the schedule,
+and a merged record cannot express any of that.
+
+**Entry is the real design problem**, and there is a shortcut here that the roster could not use.
+Typing a season of fixtures on a phone is miserable — which is why the roster originally lived in a
+published file. That approach was abandoned for players because of the privacy constraint. **A
+schedule has no such constraint**: opponent schools, dates and venues are public information, no
+minors' names involved. So a `schedule.json` seeded in the repo is viable, and lets a season be typed
+on a keyboard once. Support editing in the app too, for a mid-season change.
+
+Worth thinking about before building:
+
+- Where it lives. The tab bar is already five wide and wrapped once before, so probably not a sixth
+  tab — more likely the ☰ menu, or a panel on the Court tab when no match is open.
+- Whether past results show against the fixture list, which is most of a season summary for free.
+- Scope caution: **no reminders or notifications.** This is an offline app with no push, and a
+  calendar that promises to nag is a calendar that fails silently.
+- Ask whether they want it to feed anything else, or purely to save typing at New Match. That answer
+  decides whether this is an afternoon or a feature.
+
+### 3. Floor captain — the `c` (spec known, deliberately not built)
 
 `L: 19c` — the `c` marks the **floor captain**, who must be on the floor at all times or have
 another player designated when substituted out. Owner's call: the official book captures this, so
 the app does not need to. Do not build it without being asked.
 
-### 3. Multi-device merge (planned, deliberately not built)
+### 4. Multi-device merge (planned, deliberately not built)
 
 Match files merge at match level: `mergeJson` adds matches the device does not have and skips ones it
 does. Event-level auto-merge is a trap — there is no shared event identity, so it double-counts or
@@ -634,7 +726,7 @@ proves annoying in practice. Currently on hold — the owner is not sure other c
 Note `mergeJson` does **not** update names for players the receiving device already has, so a shared
 file is not a way to distribute names.
 
-### 4. Known asymmetry
+### 5. Known asymmetry
 
 If players are ever put back into `roster.json`, deleting one in the app does not stick — the next
 online load re-adds them. Teams do not have this problem (`hiddenTeamIds` remembers a removal).

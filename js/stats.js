@@ -3,7 +3,7 @@
  * set, match and season totals, so the numbers can never disagree.
  */
 
-import { STAT_BY_CODE, computeSetState } from './model.js';
+import { STAT_BY_CODE, computeSetState, pointFor } from './model.js';
 
 /** An empty stat line for one player (or for the team as a whole). */
 export function emptyLine() {
@@ -127,6 +127,95 @@ export function aggregateMatch(match, into = new Map()) {
 export function aggregateSeason(matches, into = new Map()) {
     for (const match of matches) aggregateMatch(match, into);
     return into;
+}
+
+/* --------------------------------------------------- where points came from */
+
+/**
+ * Split every point in the match four ways: which side got it, and whether it
+ * was earned or handed over.
+ *
+ *   us.earned          a kill, an ace, a stuff block — we finished the rally
+ *   us.fromTheirErrors they put it away themselves
+ *   them.earned        they finished the rally, and we did not record an error
+ *   them.fromOurErrors a serve into the net, an attack out, a shank
+ *
+ * `them.fromOurErrors` is the number worth coaching from, which is why the
+ * breakdown lists *which* errors rather than only the count.
+ *
+ * The winner of each point comes from `pointFor`, the same function the
+ * scoreboard replays — so these totals cannot drift from the score on screen.
+ * A test asserts they match.
+ */
+export function emptyBreakdown() {
+    return {
+        us: { earned: 0, fromTheirErrors: 0 },
+        them: { earned: 0, fromOurErrors: 0 },
+        /** Our point-winning actions, commonest first. */
+        earnedBy: new Map(),
+        /** Our point-conceding errors, commonest first. */
+        errorsBy: new Map(),
+    };
+}
+
+function bump(counts, code, name) {
+    const row = counts.get(code) ?? { code, name, count: 0 };
+    row.count += 1;
+    counts.set(code, row);
+}
+
+/**
+ * @param {Array<object>} events
+ * @param {object} [into] accumulator, so set/match/season use the same code
+ */
+export function pointBreakdown(events, into = emptyBreakdown()) {
+    for (const event of events) {
+        const winner = pointFor(event);
+        if (!winner) continue;
+
+        // A team event is a rally nobody's stat line explains: either they made
+        // an unforced error, or they simply won the point.
+        if (event.type === 'team') {
+            if (winner === 'us') into.us.fromTheirErrors += 1;
+            else into.them.earned += 1;
+            continue;
+        }
+
+        const name = STAT_BY_CODE.get(event.code)?.name ?? event.code;
+        if (winner === 'us') {
+            into.us.earned += 1;
+            bump(into.earnedBy, event.code, name);
+        } else {
+            into.them.fromOurErrors += 1;
+            bump(into.errorsBy, event.code, name);
+        }
+    }
+    return into;
+}
+
+/** Point breakdown across a list of sets. */
+export function breakdownForSets(sets, into = emptyBreakdown()) {
+    for (const set of sets) pointBreakdown(set.events ?? [], into);
+    return into;
+}
+
+/**
+ * Totals and shares, for display. Shares are null rather than 0 when there are
+ * no points yet, so the UI shows "—" instead of a confident 0%.
+ */
+export function breakdownTotals(breakdown) {
+    const us = breakdown.us.earned + breakdown.us.fromTheirErrors;
+    const them = breakdown.them.earned + breakdown.them.fromOurErrors;
+    const share = (part, whole) => (whole > 0 ? part / whole : null);
+
+    return {
+        us,
+        them,
+        usEarnedShare: share(breakdown.us.earned, us),
+        themGivenShare: share(breakdown.them.fromOurErrors, them),
+        earnedBy: [...breakdown.earnedBy.values()].sort((a, b) => b.count - a.count),
+        errorsBy: [...breakdown.errorsBy.values()].sort((a, b) => b.count - a.count),
+    };
 }
 
 /** Sum a collection of stat lines into a single team line. */
