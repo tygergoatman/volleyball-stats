@@ -10,7 +10,15 @@
  * team removes a label, not people or the matches they played.
  */
 
-import { DEFAULT_FORMAT, SCHEMA_VERSION, computeSetState, isLibero, sortPositions, targetForSet } from './model.js';
+import {
+    DEFAULT_FORMAT,
+    SCHEMA_VERSION,
+    computeSetState,
+    isLibero,
+    rotateLineupBy,
+    sortPositions,
+    targetForSet,
+} from './model.js';
 import { emptyPlan, normalisePlan } from './plan.js';
 import { DEFAULT_SYSTEM } from './formations.js';
 
@@ -754,6 +762,37 @@ export class Store {
         return this.pushEvent({ type: 'sub', kind, outId, inId });
     }
 
+    /**
+     * Change who served first in the active set.
+     *
+     * The lineup is always entered as *our* serving order — first server in
+     * position 1. If the opponent serves first, we do not reach that order until
+     * our first side-out, so the set has to start **one rotation behind**: from
+     * rotation 1 to rotation 6, with the lineup shifted to match. One side-out
+     * then rotates back to the order the coach typed, with the intended server
+     * on the line.
+     *
+     * That shift is the whole feature, and it is why this is an action rather
+     * than a field: setting the flag alone would leave the wrong six on court.
+     *
+     * Safe to change mid-set. The score counts point events and does not depend
+     * on who served, so only the rotation and lineup move — which is exactly
+     * what needed fixing if this was set wrong.
+     */
+    setStartingServer(server) {
+        this.update((state) => {
+            const match = state.matches.find((m) => m.id === state.activeMatchId);
+            const set = match?.sets.find((s) => s.id === state.activeSetId);
+            if (!set || set.startingServer === server) return;
+
+            // Their serve puts us a rotation behind; ours brings us back.
+            const shift = server === 'them' ? -1 : 1;
+            set.startingLineup = rotateLineupBy(set.startingLineup, shift);
+            set.startingRotation = ((((set.startingRotation - 1 + shift) % 6) + 6) % 6) + 1;
+            set.startingServer = server;
+        });
+    }
+
     /* ------------------------------------------------------- position colours */
 
     setPositionColor(position, hex) {
@@ -796,6 +835,22 @@ export class Store {
         this.update((state) => {
             const plan = { ...(state.plans[teamId] ?? emptyPlan()) };
             plan.subs = [...(plan.subs ?? []), { id: newId('ps'), rotation, inId, outId }];
+            state.plans[teamId] = normalisePlan(plan);
+        });
+    }
+
+    /**
+     * Change one planned swap in place, keeping its id.
+     *
+     * Delete-and-recreate was the only route before. It works, but it costs the
+     * coach every field to fix one, and the row's id moves — which matters
+     * because the id is what a dismissed prompt is keyed on.
+     */
+    updatePlanSub(id, changes, teamId = this.activeTeam?.id) {
+        if (!teamId) return;
+        this.update((state) => {
+            const plan = { ...(state.plans[teamId] ?? emptyPlan()) };
+            plan.subs = (plan.subs ?? []).map((row) => (row.id === id ? { ...row, ...changes, id } : row));
             state.plans[teamId] = normalisePlan(plan);
         });
     }

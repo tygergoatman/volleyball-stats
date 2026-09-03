@@ -121,6 +121,7 @@ export function renderCourt(root, store, actions) {
     mount(
         root,
         scoreboard(store, live, set),
+        serveStrip(store, live, set),
         courtMap(store, live, set),
         planStrip(store, live, set),
         benchStrip(store, live, actions),
@@ -220,8 +221,11 @@ function matchCompletePanel(store, match, actions) {
 function setupSetPanel(store, actions) {
     const match = store.activeMatch;
     const previous = match.sets.at(-1);
+    // Who serves first is no longer asked here. It is not known until the
+    // whistle, and guessing it at lineup time meant the lineup could be a
+    // rotation out before the first rally. The set starts assuming we serve —
+    // the Court tab flips it in one tap, and moves the court with it.
     const draft = {
-        startingServer: previous ? (previous.startingServer === 'us' ? 'them' : 'us') : 'us',
         startingRotation: 1,
         format: match.format ?? DEFAULT_FORMAT,
         system: previous?.system ?? match.sets.at(-1)?.system ?? DEFAULT_SYSTEM,
@@ -273,20 +277,6 @@ function setupSetPanel(store, actions) {
                       }),
                   ])
                 : matchProgressHint(store, match, actions),
-
-            el('div.field', {}, [
-                el('span.field__label', { text: 'First serve' }),
-                el('div.segmented', {}, [
-                    toggleButton('Us', draft.startingServer === 'us', () => {
-                        draft.startingServer = 'us';
-                        rerender();
-                    }),
-                    toggleButton('Them', draft.startingServer === 'them', () => {
-                        draft.startingServer = 'them';
-                        rerender();
-                    }),
-                ]),
-            ]),
 
             SYSTEMS.length > 1 &&
                 el('div.field', {}, [
@@ -694,6 +684,53 @@ function recentStrip(store, live) {
     );
 }
 
+/* ------------------------------------------------------------- first serve */
+
+/**
+ * Who served first, changeable for as long as the set is open.
+ *
+ * This used to be asked on the lineup screen, before the set began — but nobody
+ * knows it then. The ref says at the whistle, by which point the lineup is
+ * already entered, and getting it wrong left the whole set a rotation out.
+ *
+ * Tapping **Them** starts the set one rotation behind (rotation 1 becomes 6) and
+ * shifts the six on court to match, so the first side-out brings the coach's
+ * intended first server to the line. The court redraws as you tap, which is the
+ * confirmation that it took.
+ *
+ * It stays available all set, not just before the first rally: the score counts
+ * point events and does not care who served, so a late correction moves the
+ * rotation and nothing else. That is precisely what a coach who notices at 5-3
+ * wants.
+ */
+function serveStrip(store, live, set) {
+    const choose = (server) => {
+        if (set.startingServer === server) return;
+        store.setStartingServer(server);
+        buzz();
+        toast(live.rallies > 0 ? 'First serve changed — rotation moved, score unchanged' : 'First serve set');
+    };
+
+    return el('section.servestrip', {}, [
+        el('span.servestrip__label', { text: 'First serve' }),
+        el('div.segmented.segmented--tight', {}, [
+            el('button.seg', {
+                type: 'button',
+                class: set.startingServer === 'us' ? 'seg--on' : '',
+                text: store.activeTeam?.name ?? 'Us',
+                onClick: () => choose('us'),
+            }),
+            el('button.seg', {
+                type: 'button',
+                class: set.startingServer === 'them' ? 'seg--on' : '',
+                text: 'Them',
+                onClick: () => choose('them'),
+            }),
+        ]),
+        el('span.servestrip__rot', { text: `Rot ${set.startingRotation}` }),
+    ]);
+}
+
 /* -------------------------------------------------------------- game plan */
 
 /**
@@ -737,6 +774,9 @@ function planStrip(store, live, set) {
         rotation: live.rotation,
         available,
         liberoReplaced: sheet.awaitingLiberoReturn[0] ?? null,
+        // Lets a planned sub follow the slot when an ad-hoc swap has already
+        // moved somebody else into it.
+        rows: sheet.rows,
     }).filter((prompt) => !dismissedPrompts.has(prompt.id));
 
     if (prompts.length === 0) return null;
@@ -747,9 +787,17 @@ function planStrip(store, live, set) {
         prompts.map((prompt) =>
             el('div.planstrip__row', {}, [
                 el('span.planstrip__label', { text: prompt.kind === 'libero' ? 'Libero' : `Rot ${prompt.rotation}` }),
-                el('span.planstrip__swap', {
-                    text: `${playerLabel(store.player(prompt.inId))} > ${playerLabel(store.player(prompt.outId))}`,
-                }),
+                el('span.planstrip__swap', {}, [
+                    el('span', {
+                        text: `${playerLabel(store.player(prompt.inId))} > ${playerLabel(store.player(prompt.outId))}`,
+                    }),
+                    // Say so when the plan named somebody else: the swap on
+                    // offer is not the one that was written down.
+                    prompt.plannedOutId &&
+                        el('span.planstrip__was', {
+                            text: ` (planned for ${playerLabel(store.player(prompt.plannedOutId))})`,
+                        }),
+                ]),
                 el('button.btn.btn--primary.btn--sm', {
                     type: 'button',
                     text: 'Make sub',

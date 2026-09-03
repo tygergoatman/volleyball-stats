@@ -51,7 +51,11 @@ export function renderSubs(root, store, actions) {
     }
 
     const sheet = liberoSheet(set, { liberoIds: store.liberoIds });
-    mount(root, countPanel(store, set, sheet), planPanel(store), rowsPanel(store, sheet));
+    // Frequency decides vertical order, the same rule as the Court tab. The
+    // tracking sheet is what you hunt through mid-game to find a player, so it
+    // goes first; the plan is read at a stoppage; the substitution counter is
+    // checked once or twice a set and goes last.
+    mount(root, rowsPanel(store, sheet), planPanel(store), countPanel(store, set, sheet));
     return root;
 }
 
@@ -89,6 +93,12 @@ function planPanel(store) {
                 inId: plan.libero.liberoId,
                 outId: plan.libero.replacesId,
                 note: 'whenever they rotate back',
+                onEdit: () =>
+                    openPlanSheet(store, team, {
+                        kind: 'libero',
+                        inId: plan.libero.liberoId,
+                        outId: plan.libero.replacesId,
+                    }),
                 onRemove: () => {
                     store.setLiberoPlan(null, team.id);
                     toast('Libero plan cleared');
@@ -103,6 +113,7 @@ function planPanel(store) {
                 lead: `Rot ${row.rotation}`,
                 inId: row.inId,
                 outId: row.outId,
+                onEdit: () => openPlanSheet(store, team, { kind: 'sub', ...row }),
                 onRemove: () => {
                     store.removePlanSub(row.id, team.id);
                     toast('Planned sub removed');
@@ -153,7 +164,7 @@ function planPanel(store) {
     ]);
 }
 
-function planRow(store, { lead, inId, outId, note, onRemove }) {
+function planRow(store, { lead, inId, outId, note, onEdit, onRemove }) {
     const arriving = store.player(inId);
     const leaving = store.player(outId);
     // A plan outlives roster changes, so a row can end up pointing at somebody
@@ -162,23 +173,37 @@ function planRow(store, { lead, inId, outId, note, onRemove }) {
     const stale = !arriving || !leaving;
 
     return el('li.planlist__row', { class: stale ? 'planlist__row--stale' : '' }, [
-        el('span.planlist__lead', { text: lead }),
-        el('span.planlist__swap', {
-            text: `${arriving ? playerLabel(arriving) : '—'} > ${leaving ? playerLabel(leaving) : '—'}`,
-        }),
-        note && !stale && el('span.planlist__note', { text: note }),
-        stale && el('span.tag.tag--warn', { text: 'not on the roster' }),
+        // The row itself opens the editor. A stale row is the one most likely to
+        // need editing, so it stays tappable rather than being locked out.
+        el('button.planlist__main', { type: 'button', onClick: onEdit }, [
+            el('span.planlist__lead', { text: lead }),
+            el('span.planlist__swap', {
+                text: `${arriving ? playerLabel(arriving) : '—'} > ${leaving ? playerLabel(leaving) : '—'}`,
+            }),
+            note && !stale && el('span.planlist__note', { text: note }),
+            stale && el('span.tag.tag--warn', { text: 'not on the roster' }),
+        ]),
         el('button.planlist__remove', { type: 'button', 'aria-label': 'Remove', text: '✕', onClick: onRemove }),
     ]);
 }
 
-function openPlanSheet(store, team) {
+/**
+ * Add a plan row, or edit one in place.
+ *
+ * Pass `editing` to change an existing entry rather than append. Delete-and-
+ * recreate was the only route before, which for a one-field change (wrong
+ * rotation, wrong player) meant re-entering everything — and for a scheduled sub
+ * it also lost the row's id, so its place in the list moved.
+ */
+function openPlanSheet(store, team, editing = null) {
     // The team's own players, not `store.roster` — with no match open those are
     // two different teams, and picking from the wrong one builds a plan whose
     // rows can never fire.
     const roster = store.playersForTeam(team.id);
     const liberos = roster.filter(isLibero);
-    const draft = { kind: liberos.length > 0 ? 'libero' : 'sub', rotation: 1, inId: '', outId: '' };
+    const draft = editing
+        ? { kind: editing.kind, rotation: editing.rotation ?? 1, inId: editing.inId, outId: editing.outId }
+        : { kind: liberos.length > 0 ? 'libero' : 'sub', rotation: 1, inId: '', outId: '' };
 
     const body = el('div.form', {}, []);
 
@@ -195,7 +220,11 @@ function openPlanSheet(store, team) {
                         type: 'button',
                         class: isLiberoPlan ? 'seg--on' : '',
                         text: 'Libero',
-                        disabled: liberos.length === 0,
+                        // Editing keeps its kind: a libero pairing and a
+                        // rotation-keyed sub are stored differently, so
+                        // switching would mean deleting one and adding the
+                        // other — which is the thing this sheet exists to stop.
+                        disabled: liberos.length === 0 || Boolean(editing),
                         onClick: () => {
                             draft.kind = 'libero';
                             draft.inId = '';
@@ -206,6 +235,7 @@ function openPlanSheet(store, team) {
                         type: 'button',
                         class: !isLiberoPlan ? 'seg--on' : '',
                         text: 'Sub at a rotation',
+                        disabled: Boolean(editing),
                         onClick: () => {
                             draft.kind = 'sub';
                             rebuild();
@@ -253,11 +283,17 @@ function openPlanSheet(store, team) {
             el('div.form__actions', {}, [
                 el('button.btn.btn--primary', {
                     type: 'button',
-                    text: 'Add to plan',
+                    text: editing ? 'Save' : 'Add to plan',
                     disabled: !draft.inId || !draft.outId,
                     onClick: () => {
                         if (draft.kind === 'libero') {
                             store.setLiberoPlan({ liberoId: draft.inId, replacesId: draft.outId }, team.id);
+                        } else if (editing) {
+                            store.updatePlanSub(
+                                editing.id,
+                                { rotation: draft.rotation, inId: draft.inId, outId: draft.outId },
+                                team.id,
+                            );
                         } else {
                             store.addPlanSub(
                                 { rotation: draft.rotation, inId: draft.inId, outId: draft.outId },
@@ -265,7 +301,7 @@ function openPlanSheet(store, team) {
                             );
                         }
                         closeSheet();
-                        toast('Added to the plan');
+                        toast(editing ? 'Plan updated' : 'Added to the plan');
                     },
                 }),
             ]),
@@ -273,7 +309,11 @@ function openPlanSheet(store, team) {
     };
 
     rebuild();
-    openSheet({ title: 'Add to plan', subtitle: `${team.name} · in > out`, body });
+    openSheet({
+        title: editing ? 'Edit plan entry' : 'Add to plan',
+        subtitle: `${team.name} · in > out`,
+        body,
+    });
 }
 
 function playerField(pool, label, selectedId, onPick) {

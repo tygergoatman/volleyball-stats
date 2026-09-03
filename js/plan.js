@@ -75,7 +75,35 @@ function clampRotation(value) {
  *   put her in for somebody else.
  * @returns {Array<{kind: 'libero'|'sub', inId: string, outId: string, rotation?: number, id: string}>}
  */
-export function planPrompts({ plan, lineup = [], rotation = 1, available = [], liberoReplaced = null }) {
+/**
+ * Who is standing in the slot the planned player occupies, following any chain
+ * of substitutions already made.
+ *
+ * The reason this exists: a plan names people, but **a slot is what actually
+ * persists**. Plan `#2 in for #6`, then sub `#8` in for #6 ad hoc, and by the
+ * planned rotation #6 is on the bench — the plan is stale and silently stops
+ * firing. What the coach still wants is `#2 in for #8`, because #8 now holds
+ * the slot the plan was about.
+ *
+ * `rows` come from `liberoSheet`: each carries `entries`, everyone who has
+ * occupied that serving-order slot this set, and `currentPlayerId`. So the whole
+ * resolution is "find the slot this player has been in, and read who is there
+ * now" — derived, like everything else, with nothing stored.
+ *
+ * Returns the planned id unchanged when there are no rows to consult, so the
+ * function is safe before a set exists.
+ *
+ * @param {Array<object>} rows
+ * @param {string} playerId the player the plan names
+ * @returns {string|null}
+ */
+export function slotHolder(rows, playerId) {
+    if (!rows || rows.length === 0) return playerId;
+    const row = rows.find((slot) => (slot.entries ?? []).some((entry) => entry.playerId === playerId));
+    return row ? row.currentPlayerId : null;
+}
+
+export function planPrompts({ plan, lineup = [], rotation = 1, available = [], liberoReplaced = null, rows = [] }) {
     const prompts = [];
     if (!plan) return prompts;
 
@@ -111,10 +139,27 @@ export function planPrompts({ plan, lineup = [], rotation = 1, available = [], l
     // --- the rotation-keyed schedule --------------------------------------
     for (const row of plan.subs) {
         if (row.rotation !== rotation) continue;
+
+        // Follow the slot, not the person: an ad-hoc sub earlier in the set
+        // means the player the plan names may already be off, with somebody
+        // else holding their place.
+        const outId = slotHolder(rows, row.outId) ?? row.outId;
+
         // The derivation that replaces an "applied" flag.
-        if (!onCourt.has(row.outId)) continue;
+        if (!onCourt.has(outId)) continue;
         if (onCourt.has(row.inId) || !canComeOn.has(row.inId)) continue;
-        prompts.push({ kind: 'sub', id: row.id, inId: row.inId, outId: row.outId, rotation: row.rotation });
+
+        prompts.push({
+            kind: 'sub',
+            id: row.id,
+            inId: row.inId,
+            outId,
+            rotation: row.rotation,
+            // What the coach wrote, when it is no longer who they are replacing.
+            // A prompt naming somebody they never planned for, with no reason
+            // given, is worse than no prompt.
+            plannedOutId: outId === row.outId ? null : row.outId,
+        });
     }
 
     return prompts;

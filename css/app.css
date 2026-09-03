@@ -1748,7 +1748,7 @@ button:disabled {
     justify-content: center;
     height: 34px;
     font-weight: 800;
-    font-size: 15px;
+    font-size: 17px;
     color: var(--muted);
 }
 
@@ -1771,8 +1771,8 @@ button:disabled {
 }
 
 .lts__posnum {
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 800;
 }
 
 .lts__poslabel {
@@ -1788,7 +1788,7 @@ button:disabled {
 }
 
 .lts__mark {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
 }
 
@@ -1803,7 +1803,10 @@ button:disabled {
 
 .lts__mark--on {
     color: var(--text);
-    font-size: 15px;
+    /* The number you are hunting for at a stoppage. Everything else on the row
+       is context, so this is the one that gets the size. */
+    font-size: 22px;
+    font-weight: 800;
 }
 
 .lts__row--libero .lts__mark--on {
@@ -1816,7 +1819,8 @@ button:disabled {
 
 .lts__who {
     grid-column: 4;
-    font-size: 11px;
+    font-size: 13px;
+    font-weight: 600;
     color: var(--muted);
 }
 
@@ -2210,4 +2214,64 @@ button:disabled {
 .countlist__count {
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------- first serve */
+
+/* One thin row under the scoreboard: tapped at most once a set, so it stays
+   small, but it has to be reachable at the whistle without hunting. */
+.servestrip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 10px;
+}
+
+.servestrip__label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    flex: none;
+}
+
+.servestrip .segmented {
+    flex: 1;
+    min-width: 0;
+}
+
+.servestrip__rot {
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.segmented--tight .seg {
+    padding: 6px 8px;
+    font-size: 12px;
+}
+
+/* A plan row opens its editor; the ✕ still removes it. */
+.planlist__main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    min-height: 34px;
+    padding: 0;
+    text-align: left;
+    color: inherit;
+}
+
+.planstrip__was {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12px;
 }

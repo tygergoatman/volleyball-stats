@@ -236,6 +236,20 @@ rotation 4 puts the 4th player of that order into the serving spot. The court ma
 tap, so you can simply tap until it matches the floor rather than worrying about whose numbering
 convention is in play.
 
+### Who serves first
+
+The lineup screen doesn't ask — you don't know until the ref tells you. Every set starts assuming
+**you** serve, and a **First serve** strip sits under the scoreboard on the Court tab. One tap changes
+it, and the court redraws so you can check it against the floor.
+
+Choosing **Them** starts you in **rotation 6** rather than 1, with the six on court shifted back one.
+That is deliberate: you enter the lineup in your serving order, so when the opponent serves first your
+first side-out has to rotate you into that order. After that side-out the court matches exactly what
+you typed, with your intended server on the line.
+
+You can change it any time during the set. The score never moves — only the rotation — so if you spot
+it at 5-3 you can still put it right.
+
 ### Match format
 
 Pick **Best of 3** or **Best of 5** on the first set's lineup screen. It is only offered there,
@@ -316,6 +330,11 @@ Six rows, serving order I to VI. Each shows who started there, everyone who has 
 had, and the court position it is currently standing in. Tap a row to send the libero on or off, or
 to substitute.
 
+The sheet sits at the **top** of the tab, with the plan under it and the substitution counter at the
+bottom — most-read first, since the sheet is what you scan every rotation and the counter is a
+once-a-set glance. Whoever is currently in each slot is set in large bold type for the same reason:
+that is the number you are looking for mid-game.
+
 None of that is stored. Serving order is the starting lineup — the player in position 1 serves
 first, and rotation brings position 2 to position 1 next — and because rotation shifts all six
 uniformly while a substitution replaces a player in place, the order never scrambles for the whole
@@ -385,6 +404,15 @@ is a fresh chance to make the swap.
 Nothing is stored about whether a planned sub has happened. A prompt shows only when the player
 going out is on court and the player coming in is not, so a sub already made stops offering, a new
 set re-arms everything by itself, and undoing a sub brings its prompt back.
+
+**The plan follows the slot, not the player.** If you planned `#2 in for #6` but put #8 in for #6
+earlier in the set, the prompt at that rotation reads `#2 in for #8 (planned for #6)` — because #8 is
+now standing where #6 was. It keeps up with any chain of swaps, and tells you what you originally
+wrote so the change is never a surprise. As always it offers and does not enforce; whether a swap is
+legal under your association's rules is your call, not the app's.
+
+**Rows can be edited.** Tap a plan row to change its rotation or either player; the ✕ still deletes
+it. Editing keeps the row itself, so a prompt you had waved away stays waved away.
 
 A plan belongs to a team and is reused all season, and opens on whichever team you last picked on the
 Roster tab. If you run more than one, there is a picker at the top of the panel while no match is

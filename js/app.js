@@ -158,7 +158,9 @@ const actions = {
 
     startSet(draft) {
         store.startSet({
-            startingServer: draft.startingServer,
+            // Always 'us' at the whistle; the Court tab's serve strip is where
+            // it gets corrected, because that is when the ref actually says.
+            startingServer: 'us',
             startingRotation: draft.startingRotation,
             startingLineup: draft.lineup,
             format: draft.format,

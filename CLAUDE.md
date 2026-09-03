@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.22b** (`js/version.js`).
+Current version: **2026.08.24a** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 236 tests, all pure modules
+node --test "tests/*.test.js"                          # 257 tests, all pure modules
 ```
 
 **Three bugs in a row now have reproduced only in the installed app**, never in Chromium or device
@@ -312,6 +312,38 @@ not use.
 It was also prose only — the sheets never draw it — so the coordinates would have had to be invented
 rather than transcribed, unlike every other entry in `SERVE_RECEIVE`.
 
+## Who serves first, and why their serve means rotation 6
+
+**The lineup is always entered as _our_ serving order** — first server in position 1. That is how the
+coach thinks about it, and the lineup screen no longer asks anything else.
+
+If the opponent serves first, we do not reach that order until our first side-out. So the set has to
+**start one rotation behind**: rotation 1 becomes rotation 6, with the six on court shifted to match.
+One side-out then rotates back to exactly the order that was typed, with the intended server on the
+line. The rule generalises — whatever rotation we would have served from, their serve puts us one
+earlier — and a test covers a non-1 starting rotation.
+
+That shift is why `setStartingServer` is a store action and not a field. Setting the flag alone would
+leave the wrong six on court, which is the same bug the starting-rotation picker once had.
+
+**It was moved off the lineup screen because nobody knows the answer there.** The ref says at the
+whistle, by which point the lineup is entered — and guessing wrong left the whole set a rotation out
+with no way back. It now lives in a thin strip under the scoreboard on the Court tab, defaulting to us
+serving, one tap to change, with the court redrawing as confirmation.
+
+**It stays available for the whole set, not just before the first rally.** The score counts point
+events and does not depend on who served, so a late correction moves the rotation and lineup and
+nothing else — exactly what a coach who notices at 5-3 wants. A test asserts the score is untouched.
+
+**A property worth knowing before someone reports it as a bug:** if we side out on the very first
+rally, the two settings produce an identical court. Serving first and winning leaves our first server
+on the line; receiving first and siding out rotates us into that same place. The rotation-6 shift is
+what makes them agree, so the control genuinely "did nothing" in that one case. A test pins it.
+
+Removed with this change: sets used to alternate the default first serve automatically. That was a
+guess made before the information existed, and a wrong guess was invisible — the strip is now the
+place to say it.
+
 ## Starting rotation
 
 Entered lineup = serving order. Picking **starting rotation N** rotates it so the Nth player in that
@@ -372,6 +404,21 @@ strip**, so whatever sits at the bottom of the court screen is what a stray seco
 sheet closes. With Undo now in that band, that mattered — see the double-tap entry in the review
 findings for how `closeSheet` handles it.
 
+## Subs tab screen order (2026.08.24a)
+
+Same rule, applied late. `renderSubs` used to stack `countPanel, planPanel, rowsPanel` — the tracking
+sheet, the thing you read every rotation, was **last**, under two panels read once a match. Mid-game
+that cost real seconds finding a player to sub. It is now `rowsPanel, planPanel, countPanel`: sheet,
+then plan, then the counter.
+
+The type on the sheet was sized for a spreadsheet, not a gym. The current occupant of each serving
+slot — the one number that actually gets read at a glance — went 15px → **22px/800**, with the order
+number, position and name stepped up under it. Everything else on that row is context; it stays
+small on purpose so the live number wins.
+
+Where the plan sits was the coach's call: under the sheet, above the counter. It is mostly pre-match,
+but it is also what gets edited when the plan changes mid-set, so it beats the "15 subs left" note.
+
 ## The game plan (Subs tab, prompted on Court)
 
 Planned substitutions, written the way the coach writes them on paper —
@@ -407,8 +454,39 @@ The one piece of state is which prompts have been _waved away_, and it is sessio
 that set: rotate away and back and the offer returns, because that is a fresh chance — but it will
 not re-ask every rally in between.
 
+### The plan follows the slot, not the person (2026.08.24a)
+
+The coach's case: the plan says _#2 in for #6_, but mid-set they subbed **#8** in for #6 ad hoc. By
+the planned rotation #6 is on the bench, so the old check — "is the player going out on court?" —
+went quiet and the plan silently stopped firing. What they still want is _#2 in for **#8**_, because
+**#8 now holds the slot #6 started in**.
+
+`slotHolder(rows, playerId)` in `plan.js` resolves it, and it is three lines because the derivation
+already existed: `liberoSheet(set).rows` carries, per serving-order row, `entries[]` — everyone who
+has occupied that slot this set — and `currentPlayerId`. Find the row the planned player has been in,
+read who is standing there now. Arbitrary chains (6 → 8 → 12 → …) fall out for free, nothing is
+stored, and the existing guards still apply unchanged: quiet if the incoming player is already on,
+inert if nobody in that slot is on court.
+
+This is the model the app uses everywhere else — **a role belongs to the rotation slot, not the
+player** — and the plan was the last place still thinking in people.
+
+Two things that go with it, and should not be removed:
+
+- **The prompt says why.** `plannedOutId` is set only when the resolution moved, and `planStrip`
+  renders it as "#2 in for #8 _(planned for #6)_". A prompt naming somebody the coach never planned
+  for, with no reason given, is worse than no prompt.
+- **Legality stays the coach's business.** Associations differ on who may enter a slot once a starter
+  has been replaced. Consistent with **warn, never block**, this offers the swap and lets them
+  decide. Do not build a rules engine here.
+
 ### Other decisions
 
+- **Plan rows are editable in place** (`store.updatePlanSub`), and the edit **keeps the row's id** —
+  which matters because the id is what a waved-away prompt is keyed on. Delete-and-recreate worked,
+  but it cost every field to fix one and silently un-dismissed the prompt. The kind toggle is
+  disabled while editing: changing a rotation row into the libero pairing is a different record, not
+  an edit of this one.
 - **Stored per team** (`state.plans[teamId]`), reused all season. It is _input_, like the roster, so
   storing it does not break "everything is derived", which is about score, rotation and lineup.
 - **Never auto-applies.** Deviating from the plan is normal coaching, and a sub recorded that did not
@@ -658,64 +736,13 @@ and knowing what to look at once it is on the phone.
 
 ## Open work
 
-### 1. Capture flow: stat-first as well as player-first (from game one)
-
-Today is tap player → tap stat. In serve-receive the owner knows it is a **pass** before they know
-who touched it, so the first tap is the one they cannot make yet. Same two taps, wrong order.
-
-The shape that probably fits: a persistent pass row on the court — `3 2 1 .5 D 0` — where tapping a
-rating _arms_ it and the next player tap records it. The win is not fewer taps, it is that the first
-tap can happen **while the serve is in the air**, and there is no sheet to open and close. Keep the
-existing player-first flow untouched; this is a second route in, not a replacement.
-
-Design cautions, learned from the substitution arming that used to live on this screen:
-
-- An armed stat must be loud and must auto-disarm — a forgotten armed rating silently mis-records the
-  next tap, which is worse than a slow tap.
-- Do not arm on the stat _sheet_; that is the flow this exists to skip.
-- Serve-receive is the concrete case. Resist generalising to all five stat groups until it is proven,
-  or the court fills with buttons and the fast path gets slower.
-
-### 2. A calendar of games (owner's idea, not designed with them yet)
-
-Raised as "insert calendar of games" and nothing more, so treat the shape below as a starting point
-rather than a spec — ask before building.
-
-The obvious payoff is at **New Match**: instead of typing an opponent name courtside, tap tonight's
-fixture and get opponent, date, venue and home/away pre-filled. Right now every match is created from
-scratch, which is a keyboard on a phone in a loud gym.
-
-**A schedule is _input_**, like the roster and the game plan — stored per team, not derived, and
-storing it does not break the rule that score, rotation and lineup are always derived.
-
-**Keep a fixture and a match separate.** A match started from a fixture carries its id; it does not
-_become_ the fixture. Games get postponed, cancelled, or played when they were never on the schedule,
-and a merged record cannot express any of that.
-
-**Entry is the real design problem**, and there is a shortcut here that the roster could not use.
-Typing a season of fixtures on a phone is miserable — which is why the roster originally lived in a
-published file. That approach was abandoned for players because of the privacy constraint. **A
-schedule has no such constraint**: opponent schools, dates and venues are public information, no
-minors' names involved. So a `schedule.json` seeded in the repo is viable, and lets a season be typed
-on a keyboard once. Support editing in the app too, for a mid-season change.
-
-Worth thinking about before building:
-
-- Where it lives. The tab bar is already five wide and wrapped once before, so probably not a sixth
-  tab — more likely the ☰ menu, or a panel on the Court tab when no match is open.
-- Whether past results show against the fixture list, which is most of a season summary for free.
-- Scope caution: **no reminders or notifications.** This is an offline app with no push, and a
-  calendar that promises to nag is a calendar that fails silently.
-- Ask whether they want it to feed anything else, or purely to save typing at New Match. That answer
-  decides whether this is an afternoon or a feature.
-
-### 3. Floor captain — the `c` (spec known, deliberately not built)
+### 1. Floor captain — the `c` (spec known, deliberately not built)
 
 `L: 19c` — the `c` marks the **floor captain**, who must be on the floor at all times or have
 another player designated when substituted out. Owner's call: the official book captures this, so
 the app does not need to. Do not build it without being asked.
 
-### 4. Multi-device merge (planned, deliberately not built)
+### 2. Multi-device merge (planned, deliberately not built)
 
 Match files merge at match level: `mergeJson` adds matches the device does not have and skips ones it
 does. Event-level auto-merge is a trap — there is no shared event identity, so it double-counts or
@@ -726,7 +753,7 @@ proves annoying in practice. Currently on hold — the owner is not sure other c
 Note `mergeJson` does **not** update names for players the receiving device already has, so a shared
 file is not a way to distribute names.
 
-### 5. Known asymmetry
+### 3. Known asymmetry
 
 If players are ever put back into `roster.json`, deleting one in the app does not stick — the next
 online load re-adds them. Teams do not have this problem (`hiddenTeamIds` remembers a removal).
@@ -736,3 +763,25 @@ Currently moot because the file lists no players, but it is a live trap if that 
 
 Opponent stats are not tracked (the paper sheet does both teams; this does ours, by choice). Sets are
 captured but not linked to the kills that followed, so there is no assist column.
+
+## Set aside by the owner (not dead, just not now)
+
+Both were designed in some detail and then explicitly parked. Kept short here so picking either back
+up starts from the conclusions rather than from scratch — but **do not build either without asking**.
+
+**Stat-first capture, as a second route in.** Today is tap player → tap stat. In serve-receive the
+coach knows it is a _pass_ before they know who touched it, so the first tap is the one they cannot
+make yet. The shape that fits: a persistent pass row on the court — `3 2 1 .5 D 0` — where tapping a
+rating _arms_ it and the next player tap records it. The win is not fewer taps; it is that the first
+tap can happen **while the serve is in the air**. Cautions from the substitution arming that used to
+live on this screen: an armed stat must be loud and must auto-disarm, do not arm on the stat _sheet_
+(that is the flow this exists to skip), and do not generalise past serve-receive until it is proven.
+
+**A calendar of games.** The payoff is at New Match: tap tonight's fixture instead of typing an
+opponent into a phone in a loud gym. A schedule is **input**, like the roster and the plan, so
+storing it does not break "everything is derived". Keep a fixture and a match **separate** — a match
+started from a fixture carries its id, it does not become one, because games get postponed,
+cancelled, or played when they were never scheduled. Entry has a shortcut the roster could not use:
+opponents, dates and venues are public information, no minors' names, so a `schedule.json` in the
+repo is viable where a published roster was not. No reminders or notifications — this is an offline
+app with no push, and a calendar that promises to nag is one that fails silently.
