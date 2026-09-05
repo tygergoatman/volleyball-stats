@@ -16,6 +16,7 @@ import {
     STAT_GROUPS,
     STAT_BY_CODE,
     TEAM_EVENTS,
+    TIMEOUTS_PER_SET,
     computeSetState,
     describeEvent,
     matchScore,
@@ -109,7 +110,7 @@ let dismissedAt = null;
 
 /** Player currently selected for a substitution, if any. */
 
-export function renderCourt(root, store, actions) {
+export function renderCourt(root, store, actions, dock = null) {
     const match = store.activeMatch;
     if (!match) return mount(root, noMatchPanel(store, actions));
     if (match.complete) return mount(root, matchCompletePanel(store, match, actions));
@@ -118,19 +119,27 @@ export function renderCourt(root, store, actions) {
     if (!set) return mount(root, setupSetPanel(store, actions));
 
     const live = store.liveState;
+
+    // +1 Us / +1 Them and Undo are docked, not scrolled. They are the controls
+    // the coach reaches for between every rally, and on a phone they used to
+    // sit below the fold — the court map alone is over half the screen, so no
+    // amount of reordering keeps them in view once a plan prompt appears. The
+    // dock is a grid row of the body, so it holds its place without positioning.
+    if (dock) mount(dock, actionBar(store, live, set));
+
     mount(
         root,
         scoreboard(store, live, set),
-        serveStrip(store, live, set),
         courtMap(store, live, set),
         planStrip(store, live, set),
-        benchStrip(store, live, actions),
-        // The action bar sits above the history deliberately. +1 Us / +1 Them
-        // are the most-tapped controls on the screen — they carry the rallies
-        // that outrun stat detail — while the history is only read when undoing
-        // an entry or two. Frequency decides vertical order.
-        actionBar(store, live, set, actions),
+        // What is left scrolls, ordered by how often it is read: the history
+        // confirms the last tap, the bench is a glance, and the first-serve
+        // control and End Set are once a set. None of them is worth the space
+        // above the court map.
         recentStrip(store, live),
+        benchStrip(store, live, actions),
+        serveStrip(store, live, set),
+        endSetPanel(live, set, actions),
     );
 
     if (flipFrom) {
@@ -453,6 +462,7 @@ function scoreboard(store, live, set) {
         el('div.score.score--us', { class: live.serving === 'us' ? 'score--serving' : '' }, [
             el('span.score__label', { text: store.activeTeam?.name ?? 'Us' }),
             el('span.score__value', { text: String(live.us) }),
+            timeoutPips(store, live, 'us', store.activeTeam?.name ?? 'Us'),
         ]),
         el('div.scoreboard__mid', {}, [
             el('span.scoreboard__set', { text: `Set ${set.number}` }),
@@ -471,8 +481,53 @@ function scoreboard(store, live, set) {
         el('div.score.score--them', { class: live.serving === 'them' ? 'score--serving' : '' }, [
             el('span.score__label', { text: match.opponent }),
             el('span.score__value', { text: String(live.them) }),
+            timeoutPips(store, live, 'them', match.opponent),
         ]),
     ]);
+}
+
+/**
+ * One side's timeouts: a pip per allowance, filled while unused.
+ *
+ * Tapping the row spends one, because an indicator you cannot set is an
+ * indicator you will forget to keep true. Undo takes it straight back, and the
+ * point log can delete one from further back — the same routes as every other
+ * event, which is the point of recording it as one.
+ *
+ * Past the allowance it keeps recording and says so rather than refusing: the
+ * count is a display allowance, not a rule (see `TIMEOUTS_PER_SET`).
+ */
+function timeoutPips(store, live, team, teamName) {
+    const used = live.timeouts?.[team] ?? 0;
+    const over = Math.max(0, used - TIMEOUTS_PER_SET);
+
+    return el(
+        'button.touts',
+        {
+            type: 'button',
+            class: over > 0 ? 'touts--over' : used >= TIMEOUTS_PER_SET ? 'touts--spent' : '',
+            title: `Timeouts — ${used} of ${TIMEOUTS_PER_SET} used. Tap to call one.`,
+            'aria-label': `${teamName}: ${used} of ${TIMEOUTS_PER_SET} timeouts used. Call a timeout.`,
+            onClick: () => {
+                store.recordTimeout(team);
+                buzz();
+                const spent = used + 1;
+                toast(
+                    spent > TIMEOUTS_PER_SET
+                        ? `${teamName} timeout ${spent} — over the ${TIMEOUTS_PER_SET} allowed`
+                        : `${teamName} timeout — ${TIMEOUTS_PER_SET - spent} left`,
+                    spent > TIMEOUTS_PER_SET ? 'warn' : 'ok',
+                );
+            },
+        },
+        [
+            el('span.touts__label', { text: 'TO' }),
+            ...Array.from({ length: TIMEOUTS_PER_SET }, (_, index) =>
+                el('span.touts__pip', { class: index < used ? 'touts__pip--used' : '' }),
+            ),
+            over > 0 && el('span.touts__over', { text: `+${over}` }),
+        ],
+    );
 }
 
 /* -------------------------------------------------------------- court map */
@@ -823,58 +878,68 @@ function planStrip(store, live, set) {
 
 /* ------------------------------------------------------------- action bar */
 
-function actionBar(store, live, set, actions) {
-    return el('section.actions', {}, [
-        el(
-            'div.actions__row',
-            {},
-            TEAM_EVENTS.map((event) =>
-                el(
-                    'button.btn.btn--team',
-                    {
-                        type: 'button',
-                        class: event.point === 'us' ? 'btn--us' : 'btn--them',
-                        onClick: () => {
-                            store.recordTeamEvent(event.code);
-                            buzz();
-                            toast(event.name, event.point);
-                        },
+/**
+ * The docked controls: score a rally nobody's stat line covers, and undo.
+ *
+ * One row on purpose. Every pixel here is taken off the court map above it, and
+ * these three are what the coach taps between rallies. End Set is once a set
+ * and lives at the bottom of the scroll instead.
+ */
+function actionBar(store, live, set) {
+    return el('div.actions__row', {}, [
+        ...TEAM_EVENTS.map((event) =>
+            el(
+                'button.btn.btn--team',
+                {
+                    type: 'button',
+                    class: event.point === 'us' ? 'btn--us' : 'btn--them',
+                    onClick: () => {
+                        store.recordTeamEvent(event.code);
+                        buzz();
+                        toast(event.name, event.point);
                     },
-                    [
-                        el('span', { text: event.point === 'us' ? '+1 Us' : '+1 Them' }),
-                        el('span.btn__caption', {
-                            text: event.point === 'us' ? 'opp error' : 'opp point',
-                        }),
-                    ],
-                ),
+                },
+                [
+                    el('span', { text: event.point === 'us' ? '+1 Us' : '+1 Them' }),
+                    el('span.btn__caption', {
+                        text: event.point === 'us' ? 'opp error' : 'opp point',
+                    }),
+                ],
             ),
         ),
-        el('div.actions__row', {}, [
-            el('button.btn.btn--ghost', {
-                type: 'button',
-                text: '↶ Undo',
-                disabled: set.events.length === 0,
-                onClick: () => {
-                    const removed = store.undo();
-                    if (removed) {
-                        buzz();
-                        toast('Undone', 'warn');
-                    }
-                },
-            }),
-            el('button.btn.btn--ghost', {
-                type: 'button',
-                text: 'End Set',
-                onClick: async () => {
-                    const confirmed = await confirmDialog({
-                        title: `End set ${set.number}?`,
-                        message: `Final score ${live.us}–${live.them}. You can still start another set afterwards.`,
-                        confirmLabel: 'End Set',
-                    });
-                    if (confirmed) actions.endSet(set.id);
-                },
-            }),
-        ]),
+        el('button.btn.btn--ghost.btn--undo', {
+            type: 'button',
+            // Kept as a word, not just the glyph. The row has the width for it,
+            // and this is the button reached for in a hurry after a mis-tap.
+            text: '↶ Undo',
+            title: 'Undo the last entry',
+            disabled: set.events.length === 0,
+            onClick: () => {
+                const removed = store.undo();
+                if (removed) {
+                    buzz();
+                    toast('Undone', 'warn');
+                }
+            },
+        }),
+    ]);
+}
+
+/** End Set, parked at the very bottom — once a set, and not one to fat-finger. */
+function endSetPanel(live, set, actions) {
+    return el('section.actions', {}, [
+        el('button.btn.btn--ghost', {
+            type: 'button',
+            text: 'End Set',
+            onClick: async () => {
+                const confirmed = await confirmDialog({
+                    title: `End set ${set.number}?`,
+                    message: `Final score ${live.us}–${live.them}. You can still start another set afterwards.`,
+                    confirmLabel: 'End Set',
+                });
+                if (confirmed) actions.endSet(set.id);
+            },
+        }),
     ]);
 }
 

@@ -15,6 +15,11 @@
     <body>
         <header id="header" class="header"></header>
         <main id="view" class="view"></main>
+        <!-- Controls that must stay reachable whatever the view is scrolled to.
+             A grid row of its own, exactly like the tab bar below it — no
+             sticky, no fixed. Empty on every tab but the court, where `:empty`
+             collapses it to nothing. -->
+        <div id="dock" class="dock"></div>
         <nav id="tabs" class="tabs" aria-label="Sections"></nav>
         <noscript>
             <p style="padding: 2rem; color: #e8ecf2">This app needs JavaScript enabled.</p>

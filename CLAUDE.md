@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.24a** (`js/version.js`).
+Current version: **2026.08.25a** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 257 tests, all pure modules
+node --test "tests/*.test.js"                          # 270 tests, all pure modules
 ```
 
 **Three bugs in a row now have reproduced only in the installed app**, never in Chromium or device
@@ -387,22 +387,58 @@ makes the most distinctive one they play. See "Positions are a list" above.
 Declaration order inside `bubble()` matters, and this is another entry in the "run it in a browser"
 column.
 
-## Court tab screen order
+## The dock, and the Court tab's screen order (2026.08.25a)
 
-`renderCourt` stacks `scoreboard, courtMap, benchStrip, actionBar, recentStrip`. **Frequency decides
-vertical order** — the action bar sits above the history because that is the rule, not because of
-where it happened to land.
+**Frequency decides vertical order.** That rule moved `+1 Us` / `+1 Them` above the history after
+game one, and it was still not enough: the owner reported *still* scrolling to reach them. The
+measurements say why — on a Pixel-sized screen the view is 610px and the court content is 788px, and
+the court map alone is 344px of that. Reordering moves the problem around; it cannot create 178px.
 
-After game one the owner reported reaching for **+1 Us / +1 Them** constantly when play outran the
-stat detail, and having to scroll past the history to get to them. The history is only read when
-undoing an entry or two. So the most-tapped controls moved up and the least-read panel moved down.
-Anything added to this screen later gets placed by the same test: how often is it tapped, not how
-important it feels.
+So the scoring controls left the scroll entirely. **`#dock` is a fourth grid row of the body**,
+between `#view` and `#tabs`, holding `+1 Us`, `+1 Them` and `↶ Undo`. `app.js` empties it on every
+render and only `renderCourt` fills it, so `.dock:empty` collapses the row to nothing everywhere
+else.
 
-One consequence to keep in mind when adding anything here: **the stat sheet's buttons overlay this
-strip**, so whatever sits at the bottom of the court screen is what a stray second tap would hit as a
-sheet closes. With Undo now in that band, that mattered — see the double-tap entry in the review
-findings for how `closeSheet` handles it.
+**It is a grid row, not `position: sticky`, and that is the whole point.** Sticky is the obvious
+reach for "stays put while the view scrolls" — it was tried on the tab bar for a weaker reason and,
+installed to the home screen, lifted the bar out of its row and parked it over the page content. A
+grid row cannot do that. `tests/layout.test.js` guards it, and each guard was checked by breaking
+the rule and watching it fail.
+
+What is left in the scroll, in order: `scoreboard, courtMap, planStrip, recentStrip, benchStrip,
+serveStrip, endSetPanel`. The history confirms the last tap; the bench is a glance; the first-serve
+control and End Set are once a set. **End Set came out of the docked row on purpose** — every pixel
+there is taken off the court map, and it is not a button to have permanently under the thumb beside
+`+1`.
+
+The result on a Pixel 5: the scoreboard and the whole court map sit above the fold with the dock
+under them, and the +1 buttons are tappable at every scroll position. `court-dock.mjs` asserts
+exactly that, by hit-testing `elementFromPoint` at the top and bottom of the scroll.
+
+One consequence to keep in mind when adding anything here: **the stat sheet's buttons overlay the
+docked row**, so a stray second tap as a sheet closes lands on `+1` or Undo. That is handled — the
+closing sheet's panel goes inert while the scrim stays live (see the double-tap entry in the review
+findings) — and `court-dock.mjs` re-checks it. Do not "simplify" `closeSheet` without re-reading that.
+
+## Timeouts (2026.08.25a)
+
+`{type: 'timeout', team}`, replayed like everything else, so undo, deleting one from the log, and
+starting a new set all reset the count with no code of their own. `computeSetState` returns
+`timeouts: {us, them}` and touches nothing else — no score, no rotation, no rally count. Tests pin
+each of those, because a timeout that quietly advanced the rotation would be very hard to spot from
+the scoreboard.
+
+Shown as a pip per allowance under each score, filled while unused. **Tapping the pips calls one**,
+because an indicator you cannot set is an indicator that stops being true by the second set.
+
+`TIMEOUTS_PER_SET = 2` is the high-school rule, and it is a **display allowance, not a limit**.
+Associations differ, so a third is recorded like any other and flagged `+1` in red — the same
+warn-never-block treatment as a 16th substitution. `pointFor` says `null` for a timeout outright
+rather than letting it fall through the code lookups, so a new event type cannot quietly start
+counting as a point.
+
+Not in the stats or the CSV. It is a scoreboard indicator and a line in the point log; nobody has
+asked what the season timeout total was.
 
 ## Subs tab screen order (2026.08.24a)
 

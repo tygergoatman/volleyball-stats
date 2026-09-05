@@ -222,13 +222,20 @@ function render() {
     renderTabs();
 
     const view = $('#view');
-    if (activeTab === 'court') renderCourt(view, store, actions);
+    // Cleared on every render, so a tab that docks nothing leaves an empty dock
+    // and `.dock:empty` collapses the row. Only the court fills it today; the
+    // clearing here is what keeps that from leaking onto the other tabs.
+    const dock = $('#dock');
+    dock.replaceChildren();
+
+    if (activeTab === 'court') renderCourt(view, store, actions, dock);
     else if (activeTab === 'subs') renderSubs(view, store, actions);
     else if (activeTab === 'stats') renderStats(view, store);
     else if (activeTab === 'log') renderLog(view, store, actions);
     else renderRoster(view, store);
 
     view.dataset.tab = activeTab;
+    dock.dataset.tab = activeTab;
 }
 
 function renderHeader() {

@@ -225,8 +225,12 @@ undo and mid-log deletion always leave the score, rotation and lineup exactly ri
 | Everything else (pass 3/2/1/.5, attack `A`, serve in, block assist, dig) | Rally continues |
 
 Rallies that neither team's tracked stats ended — the opponent hits it out, or the opponent
-puts it away — use the **+1 Us / +1 Them** buttons under the court. Without those the score
-would drift, since not every point involves an action by one of your players.
+puts it away — use the **+1 Us / +1 Them** buttons. Without those the score would drift, since not
+every point involves an action by one of your players.
+
+Those two buttons and **Undo** sit in a strip pinned above the tab bar, so they are there whatever
+the page is scrolled to. They used to sit below the court map and below the fold, which meant
+scrolling for them between rallies. Everything else on the tab scrolls past them.
 
 Your team rotates automatically on a side-out (winning a rally while the opponent was serving).
 The rotation counter runs 1 → 6 and wraps.
@@ -239,8 +243,8 @@ convention is in play.
 ### Who serves first
 
 The lineup screen doesn't ask — you don't know until the ref tells you. Every set starts assuming
-**you** serve, and a **First serve** strip sits under the scoreboard on the Court tab. One tap changes
-it, and the court redraws so you can check it against the floor.
+**you** serve, and a **First serve** strip sits near the bottom of the Court tab, under the bench.
+One tap changes it, and the court redraws so you can check it against the floor.
 
 Choosing **Them** starts you in **rotation 6** rather than 1, with the six on court shifted back one.
 That is deliberate: you enter the lineup in your serving order, so when the opponent serves first your
@@ -249,6 +253,16 @@ you typed, with your intended server on the line.
 
 You can change it any time during the set. The score never moves — only the rotation — so if you spot
 it at 5-3 you can still put it right.
+
+### Timeouts
+
+Two pips under each score, one per timeout. **Tap them to call one** — the filled pips are what that
+side has left, and a spent one hollows out. The score, rotation and serve do not move; it is only a
+record that the whistle went.
+
+Two per set is the high-school rule, and it is what the pips show, but it is not enforced: call a
+third and it records, marks the row red and adds `+1`. Undo takes one straight back, and older ones
+can be deleted from the Log tab, where each timeout appears in the running order of the set.
 
 ### Match format
 
@@ -425,7 +439,7 @@ dropped, so you can decide whether it should go.
 
 ```
 volleyball-stats/
-├── index.html              shell: header, view, tab bar
+├── index.html              shell: header, view, docked controls, tab bar
 ├── roster.json             shared roster: numbers only, no names — see ROSTER.md
 ├── manifest.webmanifest    PWA metadata
 ├── sw.js                   offline precache (roster.json is network-first)

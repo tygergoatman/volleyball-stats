@@ -757,6 +757,17 @@ export class Store {
         return this.pushEvent({ type: 'team', code });
     }
 
+    /**
+     * Record a timeout for one side in the active set.
+     *
+     * An event rather than a counter, so it undoes, deletes from the log and
+     * resets each set for free — and so the point log shows *when* it was
+     * called, which is the part a coach actually reads back.
+     */
+    recordTimeout(team) {
+        return this.pushEvent({ type: 'timeout', team: team === 'them' ? 'them' : 'us' });
+    }
+
     /** Record a substitution in the active set. */
     recordSub(outId, inId, kind = 'sub') {
         return this.pushEvent({ type: 'sub', kind, outId, inId });

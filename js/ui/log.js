@@ -288,6 +288,12 @@ function openEntrySheet(store, entry, set) {
                     ),
                 ]),
             );
+        } else if (current.type === 'timeout') {
+            parts.push(
+                el('p.panel__hint', {
+                    text: 'A timeout has nothing to change — delete it if it was recorded by mistake, or if it belonged to the other side.',
+                }),
+            );
         } else {
             parts.push(
                 el('p.panel__hint', {

@@ -323,6 +323,17 @@ export const TEAM_EVENTS = [
 export const TEAM_EVENT_BY_CODE = new Map(TEAM_EVENTS.map((event) => [event.code, event]));
 
 /**
+ * Timeouts each team gets per set.
+ *
+ * Two is the high-school rule this app is built for. Associations differ, so
+ * this is a display allowance and **not** a limit: a third timeout is recorded
+ * like any other and flagged, the same way a 16th substitution is. Warn, never
+ * block — a courtside tool that refuses to record what happened is worse than
+ * one that records it and says so.
+ */
+export const TIMEOUTS_PER_SET = 2;
+
+/**
  * Which team, if any, is awarded a point by an event.
  *
  * @param {{type: string, code: string}} event
@@ -330,7 +341,10 @@ export const TEAM_EVENT_BY_CODE = new Map(TEAM_EVENTS.map((event) => [event.code
  */
 export function pointFor(event) {
     if (!event) return null;
-    if (event.type === 'sub') return null;
+    // Neither of these is a rally. Timeouts are said outright rather than left
+    // to fall through the lookups below, because a silent `undefined` is how a
+    // new event type quietly starts counting as something.
+    if (event.type === 'sub' || event.type === 'timeout') return null;
     const definition = event.type === 'team' ? TEAM_EVENT_BY_CODE.get(event.code) : STAT_BY_CODE.get(event.code);
     return definition ? (definition.point ?? null) : null;
 }
@@ -352,6 +366,11 @@ export function describeEvent(event, playerLookup = () => undefined) {
                 : `${playerLabel(arriving)} back in for libero ${playerLabel(leaving)}`;
         }
         return `Sub: ${playerLabel(arriving)} in for ${playerLabel(leaving)}`;
+    }
+    if (event.type === 'timeout') {
+        // Named by side rather than by team, because this function has no team
+        // names to hand — only a player lookup — and "ours"/"theirs" needs none.
+        return event.team === 'them' ? 'Timeout (theirs)' : 'Timeout (ours)';
     }
     if (event.type === 'team') {
         return TEAM_EVENT_BY_CODE.get(event.code)?.name ?? event.code;
@@ -465,7 +484,8 @@ export function positionOf(lineup, playerId) {
  *   rotation: number,
  *   lineup: Array<string|null>,
  *   timeline: Array<object>,
- *   rallies: number
+ *   rallies: number,
+ *   timeouts: {us: number, them: number}
  * }}
  */
 export function computeSetState(set) {
@@ -475,11 +495,26 @@ export function computeSetState(set) {
     let us = 0;
     let them = 0;
     let rallies = 0;
+    // Replayed like everything else, so undo, deleting one from the log, and
+    // starting a new set all reset them without a line of code each.
+    const timeouts = { us: 0, them: 0 };
     const timeline = [];
 
     for (const event of set.events ?? []) {
         const rotationAtEvent = rotation;
         const servingAtEvent = serving;
+
+        if (event.type === 'timeout') {
+            timeouts[event.team === 'them' ? 'them' : 'us'] += 1;
+            timeline.push({
+                event,
+                rotationAtEvent,
+                servingAtEvent,
+                winner: null,
+                scoreAfter: { us, them },
+            });
+            continue;
+        }
 
         if (event.type === 'sub') {
             lineup = applySub(lineup, event.outId, event.inId);
@@ -518,7 +553,7 @@ export function computeSetState(set) {
         });
     }
 
-    return { us, them, serving, rotation, lineup, timeline, rallies };
+    return { us, them, serving, rotation, lineup, timeline, rallies, timeouts };
 }
 
 /**

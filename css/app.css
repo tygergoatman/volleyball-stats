@@ -57,7 +57,9 @@ body {
 
 body {
     display: grid;
-    grid-template-rows: auto 1fr auto;
+    /* header, scrolling view, dock, tab bar. The dock row is `auto`, so on
+       every tab that leaves it empty it collapses to nothing. */
+    grid-template-rows: auto 1fr auto auto;
     height: 100dvh;
     background: var(--bg);
     color: var(--text);
@@ -156,6 +158,26 @@ button:disabled {
     display: flex;
     flex-direction: column;
     gap: 10px;
+}
+
+/* The always-reachable control strip, above the tab bar.
+   Same mechanism as `.tabs` and for the same reason: it is a grid row of the
+   body, NOT sticky and NOT fixed. Sticky was tried on the tab bar and, in the
+   installed app, lifted it out of its row and over the page content. A grid row
+   cannot do that. Do not "improve" this with positioning. */
+.dock {
+    z-index: var(--z-tabs);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Nothing docked on this tab: take up no room at all, borders included. */
+.dock:empty {
+    display: none;
 }
 
 .tabs {
@@ -261,6 +283,52 @@ button:disabled {
 .score--them.score--serving {
     border-color: var(--them);
     background: color-mix(in srgb, var(--them) 12%, transparent);
+}
+
+/* Timeouts: a pip per allowance, filled while unused. Tapping calls one. */
+.touts {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    line-height: 1;
+}
+
+.touts__label {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+}
+
+.touts__pip {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text);
+}
+
+/* Spent: hollowed out rather than removed, so the allowance stays legible. */
+.touts__pip--used {
+    background: none;
+    box-shadow: inset 0 0 0 1.5px var(--muted);
+}
+
+.touts--spent .touts__label {
+    color: var(--warn);
+}
+
+.touts--over {
+    background: color-mix(in srgb, var(--bad) 22%, transparent);
+}
+
+.touts__over {
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--bad);
 }
 
 .scoreboard__mid {
@@ -606,18 +674,27 @@ button:disabled {
 
 /* ---------------------------------------------------------------- actions */
 
+/* End Set, alone at the bottom of the scroll. The scoring buttons that used to
+   share this block are docked now — see `.dock`. */
 .actions {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    /* Keep the scoring buttons in thumb reach on tall phones. */
     margin-top: auto;
 }
 
+/* +1 Us | +1 Them | ↶ — undo is narrow so the two scoring buttons keep almost
+   the whole width; they are what gets tapped at speed. */
 .actions__row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr auto;
     gap: 8px;
+}
+
+.btn--undo {
+    padding: 0 12px;
+    font-size: 13px;
+    white-space: nowrap;
 }
 
 /* ----------------------------------------------------------------- buttons */
