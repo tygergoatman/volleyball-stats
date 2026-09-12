@@ -132,14 +132,15 @@ export function renderCourt(root, store, actions, dock = null) {
         scoreboard(store, live, set),
         courtMap(store, live, set),
         planStrip(store, live, set),
-        // What is left scrolls, ordered by how often it is read: the history
-        // confirms the last tap, the bench is a glance, and the first-serve
-        // control and End Set are once a set. None of them is worth the space
-        // above the court map.
-        recentStrip(store, live),
+        // What is left scrolls, ordered by how often it is read during a match.
+        // The history sits at the bottom because the owner does not read it
+        // courtside: Undo is docked, so the quick correction never needs it, and
+        // an older one gets fixed on the Log tab. It has now moved down twice —
+        // do not "restore" it above the fold without being asked.
         benchStrip(store, live, actions),
         serveStrip(store, live, set),
-        endSetPanel(live, set, actions),
+        recentStrip(store, live),
+        endSetPanel(store, live, set, actions),
     );
 
     if (flipFrom) {
@@ -227,6 +228,23 @@ function matchCompletePanel(store, match, actions) {
  * Lineup builder shown between sets. Slots are laid out exactly like the court
  * so what you tap is where the player stands.
  */
+/**
+ * "#7 Emma serves first · rotation 3" — what the picks above actually mean.
+ *
+ * The rotation number is abstract and the court map is six unlabelled spots, so
+ * neither says out loud who ends up on the line. Naming the server is the one
+ * readback a coach can check against the floor without translating anything.
+ */
+function startingServerHint(store, draft) {
+    const serverId = draft.lineup[0];
+    if (!serverId) return null;
+    const server = store.player(serverId);
+    if (!server) return null;
+    return el('p.panel__hint.panel__hint--read', {
+        text: `${playerLabel(server)} serves first · rotation ${draft.startingRotation}`,
+    });
+}
+
 function setupSetPanel(store, actions) {
     const match = store.activeMatch;
     const previous = match.sets.at(-1);
@@ -320,8 +338,18 @@ function setupSetPanel(store, actions) {
                     ),
                 ),
                 el('p.panel__hint', {
-                    text: 'Enter the lineup in serving order, then pick the rotation you are starting in — rotation 4 puts the 4th player in the serving spot. The court above moves as you pick, so it should match the floor.',
+                    text: 'Pick the rotation you are starting in — rotation 4 puts the 4th player of your serving order in the serving spot. The court below moves as you pick, so tap until it matches the floor.',
                 }),
+                // The reported mistake, called out where it gets made: the coach
+                // set rotation 6 by hand *and* then flipped First serve to Them,
+                // which shifted it back again to 5. Only one of those is theirs
+                // to do.
+                el('p.panel__hint.panel__hint--warn', {
+                    text: 'Set this as if you are serving. If they serve first, say so on the Court tab afterwards — it shifts you back one rotation for you. Do not subtract it here as well.',
+                }),
+                // Plain-language readback, so a wrong tap is visible immediately
+                // rather than at the first whistle.
+                startingServerHint(store, draft),
             ]),
 
             el('div.court.court--setup', {}, [
@@ -355,15 +383,36 @@ function setupSetPanel(store, actions) {
                 ),
             ]),
 
-            previous &&
-                el('button.btn.btn--ghost', {
-                    type: 'button',
-                    text: 'Use previous set’s lineup',
-                    onClick: () => {
-                        draft.lineup = previous.startingLineup.slice();
-                        rerender();
-                    },
-                }),
+            // Within a match the last set is the obvious source. For set 1 there
+            // is no such set, which used to mean no button at all — exactly the
+            // moment six players have to be retyped. Fall back to the last set
+            // this team actually played, whenever that was.
+            (() => {
+                const carry = previous
+                    ? { lineup: previous.startingLineup.slice(), label: 'Use previous set’s lineup' }
+                    : (() => {
+                          const last = store.lastLineupForTeam(match.teamId, match.id);
+                          return last
+                              ? { lineup: last.lineup, label: `Use last match’s lineup (vs ${last.match.opponent})` }
+                              : null;
+                      })();
+                return (
+                    carry &&
+                    el('button.btn.btn--ghost', {
+                        type: 'button',
+                        text: carry.label,
+                        onClick: () => {
+                            // Straight in as placed, then re-labelled as rotation
+                            // 1: the stored lineup is already a court, so rotating
+                            // it by the picker's current value would move it off
+                            // the arrangement being copied.
+                            draft.lineup = carry.lineup.slice();
+                            draft.startingRotation = 1;
+                            rerender();
+                        },
+                    })
+                );
+            })(),
 
             el('button.btn.btn--primary.btn--lg', {
                 type: 'button',
@@ -467,7 +516,14 @@ function scoreboard(store, live, set) {
         el('div.scoreboard__mid', {}, [
             el('span.scoreboard__set', { text: `Set ${set.number}` }),
             el('span.scoreboard__target', { text: `to ${set.target ?? 25}` }),
-            el('span.scoreboard__rot', { text: `Rot ${live.rotation}` }),
+            // Tappable: the rotation is where drift shows up, so it is also
+            // where the fix belongs.
+            el('button.scoreboard__rot', {
+                type: 'button',
+                text: `Rot ${live.rotation}`,
+                title: 'Rotation or serve out of step? Tap to set it straight.',
+                onClick: () => openCorrectSheet(store, live),
+            }),
             el('span.scoreboard__serve', {
                 class: live.serving === 'us' ? 'is-us' : 'is-them',
                 text: live.serving === 'us' ? '● serving' : 'serving ●',
@@ -528,6 +584,108 @@ function timeoutPips(store, live, team, teamName) {
             over > 0 && el('span.touts__over', { text: `+${over}` }),
         ],
     );
+}
+
+/**
+ * Put the app back in step with the floor, when a rally got missed.
+ *
+ * Shows a live court preview rather than just a number, because "rotation 4"
+ * cannot be checked against anything — six jersey numbers in six spots can be
+ * read straight off the floor. The coach taps until the preview matches.
+ *
+ * **The score is deliberately not editable here.** A rotation that is out and a
+ * score that is out are two different mistakes, and the honest fix for a missed
+ * rally is to record the rally — which puts score, serve and rotation right
+ * together. The sheet says so, and this stays the escape hatch for when the
+ * score is already correct.
+ */
+function openCorrectSheet(store, live) {
+    const draft = { rotation: live.rotation, serving: live.serving };
+    const body = el('div.form');
+
+    const rerender = () => {
+        // Where the six would stand at the chosen rotation, derived the same way
+        // replay will derive it — so the preview cannot disagree with the result.
+        const preview = rotateLineupBy(live.lineup, draft.rotation - live.rotation);
+        const serverId = preview[0];
+        const server = serverId ? store.player(serverId) : null;
+
+        mount(body, [
+            el('div.field', {}, [
+                el('span.field__label', { text: 'Rotation' }),
+                el(
+                    'div.segmented',
+                    {},
+                    [1, 2, 3, 4, 5, 6].map((n) =>
+                        toggleButton(String(n), draft.rotation === n, () => {
+                            draft.rotation = n;
+                            rerender();
+                        }),
+                    ),
+                ),
+            ]),
+
+            el('div.field', {}, [
+                el('span.field__label', { text: 'Serving' }),
+                el('div.segmented', {}, [
+                    toggleButton(store.activeTeam?.name ?? 'Us', draft.serving === 'us', () => {
+                        draft.serving = 'us';
+                        rerender();
+                    }),
+                    toggleButton('Them', draft.serving === 'them', () => {
+                        draft.serving = 'them';
+                        rerender();
+                    }),
+                ]),
+                el('p.panel__hint', {
+                    // Why serve is here at all, and not a separate fix.
+                    text: 'Set both. Whether the next point rotates you depends on who is serving, so fixing the rotation alone would go out again on the next rally.',
+                }),
+            ]),
+
+            el('div.court.court--setup.court--preview', {}, [
+                el('div.court__net', { text: 'NET' }),
+                el(
+                    'div.court__grid',
+                    {},
+                    COURT_GRID.map((position) => {
+                        const player = preview[position - 1] ? store.player(preview[position - 1]) : null;
+                        return el('div.slot.slot--filled', {}, [
+                            el('span.slot__pos', { text: `${position} ${POSITION_LABELS[position]}` }),
+                            el('span.slot__num', { text: player ? `#${player.number}` : '—' }),
+                            player?.name && el('span.slot__name', { text: player.name }),
+                        ]);
+                    }),
+                ),
+            ]),
+            el('p.panel__hint.panel__hint--read', {
+                text: server
+                    ? `${playerLabel(server)} in the serving spot · ${draft.serving === 'us' ? 'we serve' : 'they serve'}`
+                    : 'Tap until this matches the floor.',
+            }),
+
+            el('p.panel__hint', {
+                text: 'Missed a rally? Recording it with +1 Us or +1 Them fixes the score, the serve and the rotation together. Use this when the score is already right.',
+            }),
+
+            el('div.form__actions', {}, [
+                el('button.btn.btn--primary', {
+                    type: 'button',
+                    text: 'Set it straight',
+                    disabled: draft.rotation === live.rotation && draft.serving === live.serving,
+                    onClick: () => {
+                        store.correctCourt(draft);
+                        buzz();
+                        closeSheet();
+                        toast(`Rotation ${draft.rotation} · ${draft.serving === 'us' ? 'we serve' : 'they serve'}`, 'warn');
+                    },
+                }),
+            ]),
+        ]);
+    };
+
+    rerender();
+    openSheet({ title: 'Match the floor', subtitle: 'Score is left alone', body });
 }
 
 /* -------------------------------------------------------------- court map */
@@ -887,7 +1045,8 @@ function planStrip(store, live, set) {
  */
 function actionBar(store, live, set) {
     return el('div.actions__row', {}, [
-        ...TEAM_EVENTS.map((event) =>
+        // Out of rotation is rare and is not one of the fast scoring buttons.
+        ...TEAM_EVENTS.filter((event) => !event.fault).map((event) =>
             el(
                 'button.btn.btn--team',
                 {
@@ -925,9 +1084,29 @@ function actionBar(store, live, set) {
     ]);
 }
 
-/** End Set, parked at the very bottom — once a set, and not one to fat-finger. */
-function endSetPanel(live, set, actions) {
+/**
+ * Stoppage-time actions, at the very bottom of the scroll.
+ *
+ * Out of rotation is a **team** fault, not one player's, so it is not in the
+ * stat sheet's Fault row with the net touches — and it happens a handful of
+ * times a season, so it does not earn a place in the dock beside the two
+ * buttons that carry every rally. When it is called, play has stopped and there
+ * is time to scroll.
+ */
+function endSetPanel(store, live, set, actions) {
+    const rotationFault = TEAM_EVENTS.find((event) => event.fault);
+
     return el('section.actions', {}, [
+        rotationFault &&
+            el('button.btn.btn--ghost.btn--sm', {
+                type: 'button',
+                text: `${rotationFault.name} → +1 them`,
+                onClick: () => {
+                    store.recordTeamEvent(rotationFault.code);
+                    buzz();
+                    toast(rotationFault.name, 'them');
+                },
+            }),
         el('button.btn.btn--ghost', {
             type: 'button',
             text: 'End Set',

@@ -218,6 +218,26 @@ The player in position 1 is ringed in amber while your team is serving.
 You never enter the score. It is computed by replaying the events you recorded, which is why
 undo and mid-log deletion always leave the score, rotation and lineup exactly right.
 
+### What gets tracked
+
+First contact is split three ways, because they are different jobs:
+
+- **Serve Rcv** — `3 2 1 .5 0`, receiving serve. The classic passing average.
+- **In rally** — `3 2 1 D 0`. Free and easy balls get rated on the same scale; `D` is a dig off an
+  actual swing. A dig is not a rated pass, so it stays out of the in-rally average.
+- **Fault** — `Net`, `Under`, `Double`. All concede the point, so the whole row is red.
+
+The two rating rows are tinted differently — blue for serve receive, grey for in rally — because they
+hold the same five labels in the same five places and are easy to mix up at speed.
+
+**Out of rotation** is a team fault rather than one player's, so it is not in the Fault row. It sits
+at the bottom of the Court tab beside End Set, and scores a point for the other team.
+
+The Stats tab carries the split through: **Serve Rcv**, **In Rally** and **Faults** are their own
+views, and the In Rally view has an **All Pass** column combining both — so a season recorded either
+side of this change still has one comparable passing number. All four faults count as points you
+gave away rather than points they earned.
+
 | Outcome                                                                  | Result          |
 | ------------------------------------------------------------------------ | --------------- |
 | Kill, ace, solo block                                                    | Point for us    |
@@ -232,6 +252,11 @@ Those two buttons and **Undo** sit in a strip pinned above the tab bar, so they 
 the page is scrolled to. They used to sit below the court map and below the fold, which meant
 scrolling for them between rallies. Everything else on the tab scrolls past them.
 
+Above the fold you get the scoreboard, the court map and the bench. Below it, in order: the **First
+serve** strip, the recent-plays history, and **End Set**. The history is down there on purpose —
+Undo is pinned, so the quick fix never needs it, and the Log tab is where an older entry gets
+corrected.
+
 Your team rotates automatically on a side-out (winning a rally while the opponent was serving).
 The rotation counter runs 1 → 6 and wraps.
 
@@ -239,6 +264,17 @@ At set setup, enter the lineup **in serving order**, then pick the rotation you 
 rotation 4 puts the 4th player of that order into the serving spot. The court map above moves as you
 tap, so you can simply tap until it matches the floor rather than worrying about whose numbering
 convention is in play.
+
+Under the rotation picker the screen reads back what you have chosen — `#7 Emma serves first ·
+rotation 3` — so a wrong tap shows up there rather than at the first whistle.
+
+**Set the rotation as if you are serving.** If the other team serves first, say so on the Court tab
+afterwards and the app shifts you back a rotation itself. Doing both — picking rotation 6 *and*
+setting their serve — subtracts it twice and leaves you a rotation out.
+
+**Starting a new match?** The lineup screen offers the last lineup this team played, named by
+opponent, so set 1 does not mean retyping six players. It only appears when all six are still on the
+team.
 
 ### Who serves first
 
@@ -264,6 +300,21 @@ Two per set is the high-school rule, and it is what the pips show, but it is not
 third and it records, marks the row red and adds `+1`. Undo takes one straight back, and older ones
 can be deleted from the Log tab, where each timeout appears in the running order of the set.
 
+### If the rotation gets out of step
+
+Miss a rally and the app's rotation no longer matches the floor. **Tap `Rot N` on the scoreboard** to
+put it right: pick the rotation and who is serving, check the court preview against your six, and
+save. The score is left exactly as it is.
+
+Set both, not just the rotation — whether the next point rotates you depends on who is serving, so a
+rotation fixed on its own goes back out on the next rally.
+
+If what you actually did was miss a rally, recording it with **+1 Us** or **+1 Them** is the better
+fix: that puts the score, the serve and the rotation right in one tap. This is for when the score is
+already correct and only the court has drifted.
+
+Corrections show in the Log like anything else, Undo takes them back, and a new set starts clean.
+
 ### Match format
 
 Pick **Best of 3** or **Best of 5** on the first set's lineup screen. It is only offered there,
@@ -279,6 +330,16 @@ score — a set sitting at 25–20 that nobody has closed out is still in progre
 
 An ended match shows a final scoreline and stops asking for more sets. **Reopen this match** undoes
 that if play continues.
+
+### Fixing the match details
+
+Opponent, date and venue can be changed any time — **Log tab → Edit**, beside Switch. Useful when a
+name gets typed wrong courtside, since it shows on the scoreboard all match and in the filename when
+you share it.
+
+The team and the match format are fixed once a match exists. The team decides whose stats these are,
+and the format decides which set plays to 15, so changing either would move the ground under sets
+you have already played.
 
 ### Fixing a mistake afterwards
 

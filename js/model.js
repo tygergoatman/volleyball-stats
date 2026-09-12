@@ -235,19 +235,30 @@ export function isLibero(player) {
  */
 export const STAT_GROUPS = [
     {
-        key: 'pass',
-        label: 'Pass',
+        key: 'receive',
+        label: 'Serve Rcv',
         accent: 'pass',
         options: [
             { code: 'pass3', label: '3', value: 3, point: null, name: 'Perfect pass' },
             { code: 'pass2', label: '2', value: 2, point: null, name: 'Good pass' },
             { code: 'pass1', label: '1', value: 1, point: null, name: 'Poor pass' },
             { code: 'pass05', label: '.5', value: 0.5, point: null, name: 'Overpass to their side' },
-            // Sits with the passes because it is the same first-contact decision,
-            // but it counts as a dig and stays out of the passing average. Placed
-            // before the shank so every row ends on its one point-conceding button.
-            { code: 'dig', label: 'D', point: null, name: 'Dig' },
             { code: 'pass0', label: '0', value: 0, point: 'them', name: 'Shank / ace against' },
+        ],
+    },
+    {
+        // First contact in a live rally, which is not the same decision as
+        // receiving serve — and a free ball is not a dig. Rated on the same
+        // scale so the two averages are comparable; `D` is the dig off a swing.
+        key: 'rally',
+        label: 'In rally',
+        accent: 'dig',
+        options: [
+            { code: 'rally3', label: '3', value: 3, point: null, name: 'Perfect in-rally pass' },
+            { code: 'rally2', label: '2', value: 2, point: null, name: 'Good in-rally pass' },
+            { code: 'rally1', label: '1', value: 1, point: null, name: 'Poor in-rally pass' },
+            { code: 'dig', label: 'D', point: null, name: 'Dig' },
+            { code: 'rally0', label: '0', value: 0, point: 'them', name: 'In-rally passing error' },
         ],
     },
     {
@@ -291,6 +302,19 @@ export const STAT_GROUPS = [
             { code: 'serveErr', label: 'Err', point: 'them', name: 'Service error' },
         ],
     },
+    {
+        // Faults that hand the point over. Every button here concedes, so the
+        // whole row is red — which is the "red on the right" convention taken to
+        // its limit rather than a break from it.
+        key: 'fault',
+        label: 'Fault',
+        accent: 'fault',
+        options: [
+            { code: 'faultNet', label: 'Net', point: 'them', name: 'Net touch' },
+            { code: 'faultUnder', label: 'Under', point: 'them', name: 'Under the net' },
+            { code: 'faultDouble', label: 'Double', point: 'them', name: 'Double contact' },
+        ],
+    },
 ];
 
 /**
@@ -314,10 +338,20 @@ export const STAT_BY_CODE = (() => {
     return map;
 })();
 
-/** Team-level outcomes for rallies that no player stat covers. */
+/**
+ * Team-level outcomes for rallies that no player stat covers.
+ *
+ * `fault: true` marks one of **ours** — a point we handed over rather than one
+ * they earned. Without the flag every team event that scored for them counted
+ * as them earning it, which is the wrong half of the earned-vs-given-away
+ * split and the number the coach actually reads.
+ */
 export const TEAM_EVENTS = [
     { code: 'oppError', label: 'Opp Error', point: 'us', name: 'Opponent error' },
     { code: 'oppPoint', label: 'Opp Point', point: 'them', name: 'Opponent earned point' },
+    // A lineup fault, not one player's — which is why it is not in the stat
+    // sheet's Fault row with the net touches.
+    { code: 'outOfRotation', label: 'Out of Rot', point: 'them', name: 'Out of rotation', fault: true },
 ];
 
 export const TEAM_EVENT_BY_CODE = new Map(TEAM_EVENTS.map((event) => [event.code, event]));
@@ -344,7 +378,7 @@ export function pointFor(event) {
     // Neither of these is a rally. Timeouts are said outright rather than left
     // to fall through the lookups below, because a silent `undefined` is how a
     // new event type quietly starts counting as something.
-    if (event.type === 'sub' || event.type === 'timeout') return null;
+    if (event.type === 'sub' || event.type === 'timeout' || event.type === 'correct') return null;
     const definition = event.type === 'team' ? TEAM_EVENT_BY_CODE.get(event.code) : STAT_BY_CODE.get(event.code);
     return definition ? (definition.point ?? null) : null;
 }
@@ -371,6 +405,10 @@ export function describeEvent(event, playerLookup = () => undefined) {
         // Named by side rather than by team, because this function has no team
         // names to hand — only a player lookup — and "ours"/"theirs" needs none.
         return event.team === 'them' ? 'Timeout (theirs)' : 'Timeout (ours)';
+    }
+    if (event.type === 'correct') {
+        const serve = event.serving === 'them' ? 'they serve' : 'we serve';
+        return `Corrected to rotation ${event.rotation}, ${serve}`;
     }
     if (event.type === 'team') {
         return TEAM_EVENT_BY_CODE.get(event.code)?.name ?? event.code;
@@ -423,6 +461,19 @@ export function rotateLineup(lineup) {
  * @param {number} count may be negative
  * @returns {Array<string|null>} a new array
  */
+/**
+ * A rotation number that is definitely 1-6, falling back rather than throwing.
+ *
+ * Replay must never blow up on a malformed event: a set that will not compute is
+ * a set the coach cannot see at all, which is far worse than one correction
+ * quietly doing nothing.
+ */
+function clampRotation(value, fallback = 1) {
+    const rotation = Math.round(Number(value));
+    if (!Number.isFinite(rotation) || rotation < 1 || rotation > 6) return fallback;
+    return rotation;
+}
+
 export function rotateLineupBy(lineup, count) {
     const times = ((count % 6) + 6) % 6;
     let next = lineup.slice();
@@ -506,6 +557,32 @@ export function computeSetState(set) {
 
         if (event.type === 'timeout') {
             timeouts[event.team === 'them' ? 'them' : 'us'] += 1;
+            timeline.push({
+                event,
+                rotationAtEvent,
+                servingAtEvent,
+                winner: null,
+                scoreAfter: { us, them },
+            });
+            continue;
+        }
+
+        // The escape hatch: the coach has looked at the floor and is telling us
+        // what is actually true. It states the *target* rather than a delta, so
+        // it still means the same thing if an earlier event is edited later —
+        // "at this point we were in rotation 4" is an observation, not a nudge.
+        //
+        // The lineup has to move with the number. Setting the rotation counter
+        // alone would leave the court showing the wrong six, which is the exact
+        // bug the starting-rotation picker once had.
+        if (event.type === 'correct') {
+            const target = clampRotation(event.rotation, rotation);
+            lineup = rotateLineupBy(lineup, target - rotation);
+            rotation = target;
+            // Serving is corrected alongside, because fixing the rotation while
+            // the serve flag stays wrong re-breaks it on the very next rally:
+            // whether a point rotates us depends on who was serving.
+            if (event.serving === 'us' || event.serving === 'them') serving = event.serving;
             timeline.push({
                 event,
                 rotationAtEvent,

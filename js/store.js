@@ -628,6 +628,50 @@ export class Store {
         });
     }
 
+    /**
+     * The last lineup this team actually started a set with, for the "use it
+     * again" button on the set setup screen.
+     *
+     * Looks past the current match, which is the point: set 1 of a new match is
+     * exactly where retyping six players hurts most, and before this the button
+     * simply did not appear there — the only source was a previous set of the
+     * match being created.
+     *
+     * **All six must still be available or nothing is offered.** A partially
+     * filled court with silent gaps is worse than an empty one: the gaps are
+     * easy to miss on a phone, and starting a set six-minus-one is not a
+     * mistake the app can undo afterwards.
+     *
+     * @param {string} teamId
+     * @param {string|null} excludeMatchId the match being set up, skipped so
+     *   this only ever answers about earlier ones
+     * @returns {{lineup: string[], match: object}|null}
+     */
+    lastLineupForTeam(teamId, excludeMatchId = null) {
+        if (!teamId) return null;
+
+        const eligible = new Set(this.playersForTeam(teamId).map((player) => player.id));
+
+        const candidates = this.state.matches
+            .map((match, index) => ({ match, index }))
+            .filter(({ match }) => match.teamId === teamId && match.id !== excludeMatchId && match.sets?.length)
+            // Most recent first. Date is what the coach means by "last match",
+            // but two matches can share a date, so creation order breaks the tie.
+            .sort((a, b) =>
+                a.match.date === b.match.date ? b.index - a.index : String(b.match.date).localeCompare(String(a.match.date)),
+            );
+
+        for (const { match } of candidates) {
+            for (let i = match.sets.length - 1; i >= 0; i -= 1) {
+                const lineup = match.sets[i].startingLineup ?? [];
+                if (lineup.length === 6 && lineup.every((id) => id && eligible.has(id))) {
+                    return { lineup: lineup.slice(), match };
+                }
+            }
+        }
+        return null;
+    }
+
     updateMatch(id, changes) {
         this.update((state) => {
             const match = state.matches.find((m) => m.id === id);
@@ -766,6 +810,28 @@ export class Store {
      */
     recordTimeout(team) {
         return this.pushEvent({ type: 'timeout', team: team === 'them' ? 'them' : 'us' });
+    }
+
+    /**
+     * Tell the app what the floor actually looks like, when the two have drifted.
+     *
+     * The escape hatch for a missed rally or a mis-tap that got noticed late.
+     * It is an event like everything else, so it undoes, deletes from the log,
+     * and disappears with the set — and so the log shows *when* the coach
+     * corrected, which is the part worth reading back.
+     *
+     * It deliberately does **not** touch the score. A rotation that is out and a
+     * score that is out are two different mistakes; guessing that both are wrong
+     * would invent points nobody played. If a rally was genuinely missed,
+     * recording it with +1 Us / +1 Them fixes all three at once, and the sheet
+     * says so.
+     */
+    correctCourt({ rotation, serving }) {
+        return this.pushEvent({
+            type: 'correct',
+            rotation,
+            serving: serving === 'them' ? 'them' : 'us',
+        });
     }
 
     /** Record a substitution in the active set. */

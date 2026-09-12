@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.08.25a** (`js/version.js`).
+Current version: **2026.09.13a** (`js/version.js`).
 
 ## What this is
 
@@ -18,8 +18,22 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 270 tests, all pure modules
+node --test "tests/*.test.js"                          # 39 tests — see the warning below
 ```
+
+**The unit tests were lost and are not coming back on their own.** The remote working copy was
+wiped when its container was recycled, and the release zips — the only other copy — had `tests/`
+excluded from them, so 270 tests over the pure modules are gone. The app source survived because
+the owner still had the zip. Two consequences:
+
+- **`tests/` now ships in the zip.** That is the fix; do not exclude it again to keep the archive
+  tidy. The zip is the backup, and a backup that omits the tests is how this happened.
+- Rebuilding is happening **as code is touched**, not as one sitting: `privacy.test.js` first because
+  it guards a hard constraint, then `model`, `store` and `stats` covering what 2026.09.12a and
+  2026.09.13a added. 39 tests, against 270 before — treat a green run as "the recent work is covered", not "the
+  app is covered". Anything older than that is unguarded until someone writes it. The modules are
+  intact and well commented, but some of the lost tests encoded decisions made in conversation, and
+  those reasons live in this file rather than in the code.
 
 **Three bugs in a row now have reproduced only in the installed app**, never in Chromium or device
 emulation: the drifting tab bar, then the tab bar covering content. A standalone PWA can have a layout
@@ -88,13 +102,80 @@ Getting these wrong silently produced wrong statistics, which is worse than a cr
 - **Attack: `K` = kill, `A` = attack stays in play, `0` = attack error.** These were originally wired
   as K/0/A, which computed hitting percentage wrong for every rally logged as `A`.
 - **Pass `.5`** is an overpass to their side, rally continues. **Pass `0`** is a shank — point to them.
-- **`D` (dig) sits inside the Pass row**, between `.5` and `0`. It is the same first-contact decision,
-  but it counts as a dig and is deliberately excluded from the passing average.
+- **`D` (dig) sits in the In rally row**, between `1` and `0`. It is a first contact like the ratings
+  beside it, but a dig is not a rated pass and is deliberately excluded from the in-rally average.
+  See the stat taxonomy section below.
 - **Every stat row ends on its one point-conceding button**, so all the red sits down the right-hand
   edge. A test enforces this — it is what makes the sheet readable at a glance mid-rally.
 - Hitting percentage is standard `(K − 0) / attempts` and can be negative.
 - Setter and libero come from `positions` (`S` / `L`) only. There were once separate boolean flags;
   two fields saying the same thing could disagree, so they were collapsed.
+
+## The stat taxonomy (2026.09.13a)
+
+Seven rows on the stat sheet. It fits a Pixel 5 without scrolling — 552px of 727
+— which was checked before building, not after.
+
+**Serve receive and in-rally passing are different rows**, because they are
+different decisions against different balls. The owner's correction, and it was
+right: *"a serve receive isn't a dig, and in rally passing gets a lot of free
+balls which I also wouldn't count as digs."* An earlier proposal here collapsed
+in-rally passing into digging; that was wrong and would have inflated both.
+
+So three first-contact contexts, not two:
+
+| Row           | Buttons         | What it is                                   |
+| ------------- | --------------- | -------------------------------------------- |
+| **Serve Rcv** | `3 2 1 .5 0`    | receiving serve                              |
+| **In rally**  | `3 2 1 D 0`     | free/easy balls rated, `D` the dig off a swing |
+
+`D` stays out of the in-rally average: a dig is not a rated pass, and counting
+it as one drags the average around. A test pins that.
+
+**`derive` returns three averages**: `receiveAvg`, `rallyAvg`, and a combined
+`passAvg` over every ball played up. The combined one is not redundant — matches
+recorded before this have everything under `receive`, so it is the only number
+that stays comparable across the switchover. The owner asked for exactly that:
+aggregate for the season, split for finding where the errors are. Do not remove
+it to tidy up.
+
+**Faults are a row of their own**, all point-conceding, so it is entirely red —
+the "red on the right" convention taken to its limit rather than broken.
+`faultNet`, `faultUnder`, `faultDouble`, chosen by the owner from a longer list
+because six rarely-tapped buttons cost more than they return.
+
+**Out of rotation is deliberately not in that row.** It is a lineup fault, not
+one player's, so it is a `TEAM_EVENT` with `fault: true` and lives at the bottom
+of the Court tab beside End Set. It happens a handful of times a season and does
+not earn space in the dock.
+
+That `fault` flag fixes a real misattribution: **every team event scoring for
+them used to count as them _earning_ it**, so our own lineup fault flattered the
+opponent in the earned-vs-given-away panel — the one number the coach actually
+coaches from.
+
+### Dead wiring removed
+
+`digErr` had an `APPLY` handler and a **Dig Err** CSV column, and no button
+anywhere could produce the code. The column could only ever read zero. The
+in-rally error is `rally0` now; `dig.errors` is gone.
+
+### The two rating rows are tinted apart
+
+`Serve Rcv` and `In rally` hold the same five labels in the same five places,
+one directly above the other — the pair a fast tap is most likely to confuse.
+The neutral buttons carry a low-saturation wash of their row's accent (blue,
+grey) instead of the shared surface colour. Deliberately subtle: it has to read
+at a glance without competing with the red and green, which mean something.
+
+### Stored codes, and what that costs
+
+Stat codes are **persisted**, so the taxonomy is expensive to change once a
+season is recorded — which is why this was mocked up and agreed before building.
+The in-rally ratings are new codes, so nothing already recorded moves: this
+season's serve-receive figures have in-rally passes mixed in up to the
+switchover, and the two are not comparable until a few matches are on the new
+split. The owner accepted that explicitly.
 
 ## Positions are a list (schema v4)
 
@@ -340,9 +421,66 @@ rally, the two settings produce an identical court. Serving first and winning le
 on the line; receiving first and siding out rotates us into that same place. The rotation-6 shift is
 what makes them agree, so the control genuinely "did nothing" in that one case. A test pins it.
 
+**The mistake this actually produces, reported from a match:** the coach set the starting rotation to
+**6** by hand *because* the other team was serving, then also tapped First serve → Them, which shifted
+it back again to 5. The two controls each apply the shift, and applying both is double-counting. The
+setup screen now says so outright — "set this as if you are serving… do not subtract it here as well"
+— and reads back `#7 Emma serves first · rotation 3` under the picker, so a wrong tap is visible at
+setup rather than at the first whistle. The model was right; the instructions were not.
+
 Removed with this change: sets used to alternate the default first serve automatically. That was a
 guess made before the information existed, and a wrong guess was invisible — the strip is now the
 place to say it.
+
+## Matching the floor mid-set (2026.09.12a)
+
+The escape hatch for when the app and the gym have drifted apart — a rally that
+never got recorded, a mis-tap noticed three points later. Tap **Rot N** on the
+scoreboard.
+
+`{type: 'correct', rotation, serving}`, replayed like everything else, so it
+undoes, deletes from the log, and disappears with the set without a line of code
+for any of them. Three decisions worth keeping:
+
+- **It states a target, not a delta.** "At this point we were in rotation 4" is
+  an observation about the floor, so it still means the same thing if an earlier
+  event is edited afterwards, and two corrections in a row land on the second
+  number rather than compounding.
+- **The lineup moves with the number.** Setting the counter alone would leave the
+  court showing the wrong six — the exact bug the starting-rotation picker once
+  had, and the reason `rotateLineupBy` is called here too.
+- **Serving is corrected alongside, not separately.** Whether a point rotates us
+  depends on who was serving, so fixing the rotation while the serve flag stays
+  wrong goes straight back out on the next rally. One sheet, both facts.
+
+**The score is deliberately not editable here.** A rotation that is out and a
+score that is out are two different mistakes, and the honest fix for a missed
+rally is to record the rally — which puts score, serve and rotation right
+together. The sheet says so, and points at +1 Us / +1 Them.
+
+The sheet shows a **live court preview** rather than just a number, because
+"rotation 4" cannot be checked against anything, and six jerseys in six spots can
+be read straight off the floor. It draws rotational positions, like the setup
+screen — not the Base formation the Court tab shows — because rotational is what
+a coach is looking at during a stoppage. A malformed rotation falls back rather
+than throwing: a set that will not compute is worse than a correction that
+quietly does nothing.
+
+## Carrying a lineup into a new match (2026.09.12a)
+
+`store.lastLineupForTeam(teamId, excludeMatchId)`. The button used to read only
+`match.sets.at(-1)`, so it never appeared on **set 1 of a new match** — precisely
+where six players otherwise get retyped. It now falls back to the last set this
+team actually played, whenever that was, labelled with the opponent so it is
+obvious what is being copied.
+
+Two rules: most recent **by date** (creation order only breaks a tie, since a
+forgotten match gets back-filled with an earlier date), and **all six must still
+be on the team or nothing is offered** — a partly filled court with silent gaps
+is worse than an empty one on a phone, and a set started five-a-side cannot be
+undone afterwards. Applying it resets the picker to rotation 1, because the
+stored lineup is already a court and rotating it again would move it off the
+arrangement being copied.
 
 ## Starting rotation
 
@@ -387,6 +525,20 @@ makes the most distinctive one they play. See "Positions are a list" above.
 Declaration order inside `bubble()` matters, and this is another entry in the "run it in a browser"
 column.
 
+## Editing a match after the fact (2026.09.11a)
+
+Opponent, date and venue are editable from the Log tab (**Edit**, beside Switch). The reported case
+was a misspelled opponent with no way back — and the name is on the scoreboard all match and in the
+share filename afterwards, so it is not cosmetic.
+
+**Only those three fields, deliberately.** The team decides which roster every recorded stat belongs
+to, and the format decides which set is played to 15 — changing either after sets exist moves the
+ground under results already captured. Both stay set-once, as they are on the create screen. A blank
+opponent is refused rather than saved, the same floor `createMatch` already had.
+
+Nothing derived reads these fields, so a rename cannot move a score. That is what makes it safe on a
+finished match, and a browser check asserts the recorded stats are untouched by one.
+
 ## The dock, and the Court tab's screen order (2026.08.25a)
 
 **Frequency decides vertical order.** That rule moved `+1 Us` / `+1 Them` above the history after
@@ -405,9 +557,14 @@ installed to the home screen, lifted the bar out of its row and parked it over t
 grid row cannot do that. `tests/layout.test.js` guards it, and each guard was checked by breaking
 the rule and watching it fail.
 
-What is left in the scroll, in order: `scoreboard, courtMap, planStrip, recentStrip, benchStrip,
-serveStrip, endSetPanel`. The history confirms the last tap; the bench is a glance; the first-serve
-control and End Set are once a set. **End Set came out of the docked row on purpose** — every pixel
+What is left in the scroll, in order: `scoreboard, courtMap, planStrip, benchStrip, serveStrip,
+recentStrip, endSetPanel`. The bench is a glance; the first-serve control and End Set are once a set.
+
+**The history is at the bottom, and it got there twice.** It was moved below the action bar after
+game one, then all the way down here when the owner said plainly that they do not read it during a
+match. That is the correct read of the frequency rule now that Undo is docked: the quick correction
+never needs the strip, and an older one gets fixed on the Log tab. Do not move it back up without
+being asked. **End Set came out of the docked row on purpose** — every pixel
 there is taken off the court map, and it is not a button to have permanently under the thumb beside
 `+1`.
 

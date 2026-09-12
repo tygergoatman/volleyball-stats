@@ -3,44 +3,79 @@
  * set, match and season totals, so the numbers can never disagree.
  */
 
-import { STAT_BY_CODE, computeSetState, pointFor } from './model.js';
+import { STAT_BY_CODE, TEAM_EVENT_BY_CODE, computeSetState, pointFor } from './model.js';
 
 /** An empty stat line for one player (or for the team as a whole). */
 export function emptyLine() {
     return {
-        pass: { att: 0, total: 0, zero: 0, half: 0, one: 0, two: 0, three: 0 },
+        // Receiving serve and playing a ball up in a live rally are different
+        // decisions against different balls, so they are counted apart. `derive`
+        // still adds them back together for a whole-season "all passes" number.
+        receive: { att: 0, total: 0, zero: 0, half: 0, one: 0, two: 0, three: 0 },
+        rally: { att: 0, total: 0, zero: 0, one: 0, two: 0, three: 0 },
         attack: { att: 0, kills: 0, errors: 0, inPlay: 0 },
         set: { att: 0, total: 0, errors: 0 },
         serve: { att: 0, aces: 0, errors: 0, inPlay: 0 },
         block: { solo: 0, assist: 0, errors: 0 },
-        dig: { digs: 0, errors: 0 },
+        // A dig is defending a swing. Free balls are `rally`, not digs — that
+        // distinction is the whole reason the two rows exist.
+        dig: { digs: 0 },
+        fault: { net: 0, under: 0, double: 0 },
     };
 }
 
 const APPLY = {
     pass3: (line) => {
-        line.pass.att += 1;
-        line.pass.total += 3;
-        line.pass.three += 1;
+        line.receive.att += 1;
+        line.receive.total += 3;
+        line.receive.three += 1;
     },
     pass2: (line) => {
-        line.pass.att += 1;
-        line.pass.total += 2;
-        line.pass.two += 1;
+        line.receive.att += 1;
+        line.receive.total += 2;
+        line.receive.two += 1;
     },
     pass1: (line) => {
-        line.pass.att += 1;
-        line.pass.total += 1;
-        line.pass.one += 1;
+        line.receive.att += 1;
+        line.receive.total += 1;
+        line.receive.one += 1;
     },
     pass05: (line) => {
-        line.pass.att += 1;
-        line.pass.total += 0.5;
-        line.pass.half += 1;
+        line.receive.att += 1;
+        line.receive.total += 0.5;
+        line.receive.half += 1;
     },
     pass0: (line) => {
-        line.pass.att += 1;
-        line.pass.zero += 1;
+        line.receive.att += 1;
+        line.receive.zero += 1;
+    },
+    rally3: (line) => {
+        line.rally.att += 1;
+        line.rally.total += 3;
+        line.rally.three += 1;
+    },
+    rally2: (line) => {
+        line.rally.att += 1;
+        line.rally.total += 2;
+        line.rally.two += 1;
+    },
+    rally1: (line) => {
+        line.rally.att += 1;
+        line.rally.total += 1;
+        line.rally.one += 1;
+    },
+    rally0: (line) => {
+        line.rally.att += 1;
+        line.rally.zero += 1;
+    },
+    faultNet: (line) => {
+        line.fault.net += 1;
+    },
+    faultUnder: (line) => {
+        line.fault.under += 1;
+    },
+    faultDouble: (line) => {
+        line.fault.double += 1;
     },
     kill: (line) => {
         line.attack.att += 1;
@@ -94,9 +129,9 @@ const APPLY = {
     dig: (line) => {
         line.dig.digs += 1;
     },
-    digErr: (line) => {
-        line.dig.errors += 1;
-    },
+    // There was a `digErr` handler here and a "Dig Err" CSV column, with no
+    // button anywhere that could produce the code — the column could only ever
+    // read zero. The in-rally error is `rally0` now, and this is gone.
 };
 
 /**
@@ -173,11 +208,16 @@ export function pointBreakdown(events, into = emptyBreakdown()) {
         const winner = pointFor(event);
         if (!winner) continue;
 
-        // A team event is a rally nobody's stat line explains: either they made
-        // an unforced error, or they simply won the point.
+        // A team event is a rally nobody's stat line explains. Most are theirs —
+        // they erred, or they simply won it — but a `fault` one is ours, and
+        // counting it as them earning the point is the wrong half of the split.
         if (event.type === 'team') {
+            const definition = TEAM_EVENT_BY_CODE.get(event.code);
             if (winner === 'us') into.us.fromTheirErrors += 1;
-            else into.them.earned += 1;
+            else if (definition?.fault) {
+                into.them.fromOurErrors += 1;
+                bump(into.errorsBy, event.code, definition.name);
+            } else into.them.earned += 1;
             continue;
         }
 
@@ -238,7 +278,14 @@ export function totalLine(lines) {
  * there are no attempts, so the UI can render "—" instead of a misleading zero.
  */
 export function derive(line) {
-    const passAvg = line.pass.att ? line.pass.total / line.pass.att : null;
+    const receiveAvg = line.receive.att ? line.receive.total / line.receive.att : null;
+    const rallyAvg = line.rally.att ? line.rally.total / line.rally.att : null;
+    // Every ball played up, however it arrived. Kept because the split only
+    // exists from 2026.09.13a onward: matches recorded before it have all their
+    // passes under `receive`, so this is the one number that stays comparable
+    // across the whole season.
+    const passAtt = line.receive.att + line.rally.att;
+    const passAvg = passAtt ? (line.receive.total + line.rally.total) / passAtt : null;
     const attackAtt = line.attack.att;
     const hitPct = attackAtt ? (line.attack.kills - line.attack.errors) / attackAtt : null;
     const killPct = attackAtt ? line.attack.kills / attackAtt : null;
@@ -250,7 +297,11 @@ export function derive(line) {
 
     return {
         passAvg,
-        passAtt: line.pass.att,
+        passAtt,
+        receiveAvg,
+        receiveAtt: line.receive.att,
+        rallyAvg,
+        rallyAtt: line.rally.att,
         hitPct,
         killPct,
         attackAtt,
@@ -268,8 +319,11 @@ export function derive(line) {
             line.serve.errors +
             line.set.errors +
             line.block.errors +
-            line.dig.errors +
-            line.pass.zero,
+            line.receive.zero +
+            line.rally.zero +
+            line.fault.net +
+            line.fault.under +
+            line.fault.double,
     };
 }
 
@@ -310,13 +364,23 @@ export function rotationBreakdown(sets) {
 const CSV_COLUMNS = [
     ['#', (player) => player.number],
     ['Name', (player) => player.name],
-    ['Pass Att', (_p, line) => line.pass.att],
-    ['Pass Avg', (_p, line, d) => fmtNumber(d.passAvg, 2)],
-    ['Pass 3', (_p, line) => line.pass.three],
-    ['Pass 2', (_p, line) => line.pass.two],
-    ['Pass 1', (_p, line) => line.pass.one],
-    ['Pass .5', (_p, line) => line.pass.half],
-    ['Pass 0', (_p, line) => line.pass.zero],
+    // Every ball played up, so a season that straddles the receive/rally split
+    // still has one comparable passing number.
+    ['Pass Att', (_p, _line, d) => d.passAtt],
+    ['Pass Avg', (_p, _line, d) => fmtNumber(d.passAvg, 2)],
+    ['Rcv Att', (_p, line) => line.receive.att],
+    ['Rcv Avg', (_p, _line, d) => fmtNumber(d.receiveAvg, 2)],
+    ['Rcv 3', (_p, line) => line.receive.three],
+    ['Rcv 2', (_p, line) => line.receive.two],
+    ['Rcv 1', (_p, line) => line.receive.one],
+    ['Rcv .5', (_p, line) => line.receive.half],
+    ['Rcv Err', (_p, line) => line.receive.zero],
+    ['Rally Att', (_p, line) => line.rally.att],
+    ['Rally Avg', (_p, _line, d) => fmtNumber(d.rallyAvg, 2)],
+    ['Rally 3', (_p, line) => line.rally.three],
+    ['Rally 2', (_p, line) => line.rally.two],
+    ['Rally 1', (_p, line) => line.rally.one],
+    ['Rally Err', (_p, line) => line.rally.zero],
     ['Kills (K)', (_p, line) => line.attack.kills],
     ['Attack In Play (A)', (_p, line) => line.attack.inPlay],
     ['Attack Err (0)', (_p, line) => line.attack.errors],
@@ -332,7 +396,9 @@ const CSV_COLUMNS = [
     ['Block Asst', (_p, line) => line.block.assist],
     ['Block Err', (_p, line) => line.block.errors],
     ['Digs', (_p, line) => line.dig.digs],
-    ['Dig Err', (_p, line) => line.dig.errors],
+    ['Net Touch', (_p, line) => line.fault.net],
+    ['Under Net', (_p, line) => line.fault.under],
+    ['Double Contact', (_p, line) => line.fault.double],
 ];
 
 function fmtNumber(value, digits) {

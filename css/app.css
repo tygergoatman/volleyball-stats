@@ -353,12 +353,32 @@ button:disabled {
     text-transform: uppercase;
 }
 
+/* A button now — tapping it opens the "match the floor" correction. The dotted
+   underline is the only hint that it does anything; the chip has to stay small. */
 .scoreboard__rot {
     background: var(--surface-3);
     border-radius: 999px;
     padding: 2px 9px;
     font-weight: 700;
+    font-size: 11px;
     color: var(--text);
+    border-bottom: 1px dotted var(--muted);
+}
+
+/* A hint that is a warning, not just prose. */
+.panel__hint--warn {
+    color: var(--warn);
+}
+
+/* A hint that reads back what the controls above just did. */
+.panel__hint--read {
+    color: var(--text);
+    font-weight: 700;
+}
+
+/* The court in the correction sheet is for reading, not tapping. */
+.court--preview .slot {
+    pointer-events: none;
 }
 
 .scoreboard__serve.is-us {
@@ -791,6 +811,15 @@ button:disabled {
     gap: 8px;
 }
 
+/* More than one button in a panel head — kept together on the right so the
+   title still owns the left edge. */
+.panel__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+}
+
 .panel__title {
     margin: 0;
     font-size: 15px;
@@ -1099,6 +1128,10 @@ button:disabled {
 .statgroup--block .statgroup__label {
     color: var(--block);
 }
+.statgroup--fault .statgroup__label {
+    color: var(--bad);
+}
+
 .statgroup--dig .statgroup__label {
     color: var(--dig);
 }
@@ -1123,9 +1156,25 @@ button:disabled {
     transform: scale(0.95);
 }
 
-/* The pass row carries six buttons, so its labels get a touch less type. */
-.statgroup--pass .statbtn {
+/* Both rating rows carry five buttons, so their labels get a touch less type. */
+.statgroup--pass .statbtn,
+.statgroup--dig .statbtn {
     font-size: 17px;
+}
+
+/* Serve Rcv and In rally hold the same five labels in the same five places, one
+   directly above the other — the two rows a fast tap is most likely to confuse.
+   So the neutral buttons carry a tint of their row's accent rather than the
+   shared grey. It is deliberately low-saturation: this has to read at a glance
+   without competing with the red and green that mean something. */
+.statgroup--pass .statbtn:not(.statbtn--good):not(.statbtn--bad) {
+    background: color-mix(in srgb, var(--pass) 22%, var(--surface-3));
+    border-color: color-mix(in srgb, var(--pass) 45%, var(--border));
+}
+
+.statgroup--dig .statbtn:not(.statbtn--good):not(.statbtn--bad) {
+    background: color-mix(in srgb, var(--dig) 20%, var(--surface-3));
+    border-color: color-mix(in srgb, var(--dig) 42%, var(--border));
 }
 
 .statbtn--good {

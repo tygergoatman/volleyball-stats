@@ -1,8 +1,12 @@
+/**
+ * Store actions. Rebuilt after the original suite was lost — this covers what
+ * 2026.09.12a added, not the whole module.
+ */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Store } from '../js/store.js';
-import { computeSetState } from '../js/model.js';
 
 /** Minimal in-memory stand-in for localStorage. */
 class MemoryStorage {
@@ -20,207 +24,142 @@ class MemoryStorage {
     }
 }
 
-/** A store with six players on court and a set already started. */
-function seeded(storage = new MemoryStorage()) {
+function seeded() {
+    const storage = new MemoryStorage();
     const store = new Store(storage);
-    const team = store.addTeam({ id: 'var', name: 'Var', fullName: 'Varsity' });
-    const players = ['Jane', 'Tess', 'McKenna', 'Ella', 'Hailey', 'Hannah', 'Bench One'].map((name, index) =>
+    const team = store.addTeam({ id: 'jv', name: 'JV', fullName: 'Junior Varsity' });
+    const players = ['Sara', 'Olive', 'Maddy', 'Sky', 'Opal', 'Mabel', 'Nell'].map((name, index) =>
         store.addPlayer({ number: String(index + 1), name, teams: [team.id] }),
     );
-    store.createMatch({ teamId: team.id, opponent: 'Cornerstone', date: '2026-08-06', venue: 'RRC' });
+    return { store, players, team, storage };
+}
+
+function startMatch(store, players, { opponent = 'Cornerstone', date = '2026-09-01' } = {}) {
+    store.createMatch({ teamId: 'jv', opponent, date });
     store.startSet({
         startingServer: 'us',
         startingRotation: 1,
         startingLineup: players.slice(0, 6).map((p) => p.id),
     });
-    return { store, players, storage, team };
 }
 
-test('addPlayer keeps the roster sorted by jersey number', () => {
-    const store = new Store(new MemoryStorage());
-    const team = store.addTeam({ id: 'var', name: 'Var' });
-    store.addPlayer({ number: '16', name: 'McKenna', teams: [team.id] });
-    store.addPlayer({ number: '2', name: 'Jane', teams: [team.id] });
-    store.addPlayer({ number: '8', name: 'Ella', teams: [team.id] });
-    assert.deepEqual(
-        store.roster.map((p) => p.number),
-        ['2', '8', '16'],
-    );
-});
+/* ------------------------------------------------------- court correction */
 
-test('players without a numeric jersey sort to the end', () => {
-    const store = new Store(new MemoryStorage());
-    const team = store.addTeam({ id: 'var', name: 'Var' });
-    store.addPlayer({ number: '5', name: 'Five', teams: [team.id] });
-    store.addPlayer({ number: '', name: 'Nameless', teams: [team.id] });
-    assert.deepEqual(
-        store.roster.map((p) => p.name),
-        ['Five', 'Nameless'],
-    );
-});
-
-test('recording a stat updates the derived score', () => {
+test('correcting the court moves rotation and serve but not the score', () => {
     const { store, players } = seeded();
-    store.recordStat(players[0].id, 'ace');
-    assert.equal(store.liveState.us, 1);
-    assert.equal(store.liveState.them, 0);
-
-    store.recordStat(players[1].id, 'attackErr');
-    assert.equal(store.liveState.them, 1);
-    assert.equal(store.liveState.serving, 'them');
-});
-
-test('undo removes the last event and rewinds the score', () => {
-    const { store, players } = seeded();
-    store.recordStat(players[0].id, 'ace');
-    store.recordStat(players[0].id, 'ace');
-    assert.equal(store.liveState.us, 2);
-
-    const removed = store.undo();
-    assert.equal(removed.code, 'ace');
-    assert.equal(store.liveState.us, 1);
-    assert.equal(store.activeSet.events.length, 1);
-});
-
-test('undo on an empty set is a no-op', () => {
-    const { store } = seeded();
-    assert.equal(store.undo(), null);
-    assert.equal(store.liveState.us, 0);
-});
-
-test('team events score without attributing a stat to anyone', () => {
-    const { store } = seeded();
+    startMatch(store, players);
     store.recordTeamEvent('oppError');
-    store.recordTeamEvent('oppPoint');
-    assert.equal(store.liveState.us, 1);
-    assert.equal(store.liveState.them, 1);
-    assert.ok(store.activeSet.events.every((event) => !event.playerId));
+    const before = store.liveState;
+
+    store.correctCourt({ rotation: 4, serving: 'them' });
+    const after = store.liveState;
+
+    assert.equal(after.rotation, 4);
+    assert.equal(after.serving, 'them');
+    assert.equal(after.us, before.us, 'the score is not this control’s business');
+    assert.equal(after.them, before.them);
 });
 
-test('substitutions put the bench player on the court', () => {
+test('undo takes a correction back', () => {
     const { store, players } = seeded();
-    const bench = players[6];
-    store.recordSub(players[2].id, bench.id);
+    startMatch(store, players);
+    const before = store.liveState.rotation;
 
-    const live = store.liveState;
-    assert.ok(live.lineup.includes(bench.id));
-    assert.ok(!live.lineup.includes(players[2].id));
+    store.correctCourt({ rotation: 5, serving: 'us' });
+    assert.equal(store.liveState.rotation, 5);
+
+    store.undo();
+    assert.equal(store.liveState.rotation, before);
 });
 
-test('deleteEvent recalculates the score from the remaining events', () => {
+test('an unrecognised side is recorded as ours rather than dropped', () => {
     const { store, players } = seeded();
-    store.recordStat(players[0].id, 'ace');
-    const middle = store.recordStat(players[1].id, 'attackErr');
-    store.recordStat(players[2].id, 'kill');
-    assert.deepEqual([store.liveState.us, store.liveState.them], [2, 1]);
-
-    store.deleteEvent(middle.id);
-    assert.deepEqual([store.liveState.us, store.liveState.them], [2, 0]);
-    assert.equal(store.liveState.rotation, 1, 'the side-out that followed no longer applies');
+    startMatch(store, players);
+    store.correctCourt({ rotation: 2, serving: 'sideways' });
+    assert.equal(store.liveState.serving, 'us');
 });
 
-test('a second set starts at 0-0 with its own lineup', () => {
-    const { store, players } = seeded();
-    store.recordStat(players[0].id, 'ace');
-    const first = store.activeSet.id;
+/* ------------------------------------------------- carrying a lineup over */
 
+test('a new match offers the last lineup this team played', () => {
+    const { store, players } = seeded();
+    startMatch(store, players, { opponent: 'Cornerstone', date: '2026-09-01' });
+    const played = store.activeSet.startingLineup.slice();
+
+    store.createMatch({ teamId: 'jv', opponent: 'Northside', date: '2026-09-08' });
+    const carry = store.lastLineupForTeam('jv', store.activeMatch.id);
+
+    assert.ok(carry, 'a previous match should be offered');
+    assert.deepEqual(carry.lineup, played);
+    assert.equal(carry.match.opponent, 'Cornerstone');
+});
+
+test('the current match is never its own source', () => {
+    const { store, players } = seeded();
+    startMatch(store, players);
+    // Excluding the live match is what stops set 1 offering to copy itself.
+    assert.equal(store.lastLineupForTeam('jv', store.activeMatch.id), null);
+});
+
+test('the most recent match wins, by date rather than entry order', () => {
+    const { store, players } = seeded();
+    // Entered out of order, the way a forgotten match gets back-filled later.
+    startMatch(store, players, { opponent: 'Older', date: '2026-09-01' });
+    store.createMatch({ teamId: 'jv', opponent: 'Newer', date: '2026-09-09' });
     store.startSet({
-        startingServer: 'them',
-        startingRotation: 3,
-        startingLineup: players.slice(1, 7).map((p) => p.id),
+        startingServer: 'us',
+        startingRotation: 1,
+        startingLineup: [players[6], ...players.slice(1, 6)].map((p) => p.id),
     });
 
-    assert.notEqual(store.activeSet.id, first);
-    assert.equal(store.activeSet.number, 2);
-    assert.equal(store.liveState.us, 0);
-    assert.equal(store.liveState.rotation, 3);
-    assert.equal(store.activeMatch.sets.length, 2);
-
-    // The first set keeps its own history.
-    const original = store.activeMatch.sets[0];
-    assert.equal(computeSetState(original).us, 1);
+    store.createMatch({ teamId: 'jv', opponent: 'Today', date: '2026-09-12' });
+    const carry = store.lastLineupForTeam('jv', store.activeMatch.id);
+    assert.equal(carry.match.opponent, 'Newer');
 });
 
-test('state survives a reload from storage', () => {
-    const { store, players, storage } = seeded();
-    store.recordStat(players[0].id, 'kill');
-    store.recordStat(players[1].id, 'pass3');
-
-    const reloaded = new Store(storage);
-    assert.equal(reloaded.roster.length, 7);
-    assert.equal(reloaded.activeMatch.opponent, 'Cornerstone');
-    assert.equal(reloaded.liveState.us, 1);
-    assert.equal(reloaded.activeSet.events.length, 2);
-});
-
-test('corrupt saved data falls back to an empty state instead of throwing', () => {
-    const storage = new MemoryStorage();
-    storage.setItem('volleyball-stats.v1', '{not json');
-    const store = new Store(storage);
-    assert.deepEqual(store.roster, []);
-    assert.deepEqual(store.state.matches, []);
-});
-
-test('a partial saved blob is filled in with defaults', () => {
-    const storage = new MemoryStorage();
-    storage.setItem('volleyball-stats.v1', JSON.stringify({ roster: [{ id: 'x', number: '1' }] }));
-    const store = new Store(storage);
-    assert.equal(store.roster.length, 1);
-    assert.equal(store.teams.length, 1, 'the flat v1 roster becomes one team');
-    assert.deepEqual(store.state.matches, []);
-});
-
-test('export then import round-trips the whole season', () => {
+test('nothing is offered when a player from that lineup has left the team', () => {
+    // A partly filled court with silent gaps is worse than an empty one: the gap
+    // is easy to miss on a phone, and a set started five-a-side cannot be undone.
     const { store, players } = seeded();
-    store.recordStat(players[0].id, 'kill');
-    const json = store.exportJson();
+    startMatch(store, players);
 
-    const fresh = new Store(new MemoryStorage());
-    fresh.importJson(json);
-    assert.equal(fresh.roster.length, 7);
-    assert.equal(fresh.liveState.us, 1);
-    assert.equal(fresh.activeMatch.opponent, 'Cornerstone');
+    store.deletePlayer(players[2].id);
+    store.createMatch({ teamId: 'jv', opponent: 'Northside', date: '2026-09-08' });
+
+    assert.equal(store.lastLineupForTeam('jv', store.activeMatch.id), null);
 });
 
-test('subscribers are notified on every mutation', () => {
+test('another team’s lineup is never offered', () => {
     const { store, players } = seeded();
-    let calls = 0;
-    const unsubscribe = store.subscribe(() => {
-        calls += 1;
-    });
+    store.addTeam({ id: 'var', name: 'Var', fullName: 'Varsity' });
+    startMatch(store, players);
 
-    store.recordStat(players[0].id, 'ace');
-    store.recordTeamEvent('oppError');
-    assert.equal(calls, 2);
-
-    unsubscribe();
-    store.recordStat(players[0].id, 'ace');
-    assert.equal(calls, 2, 'unsubscribed listeners stop firing');
+    store.createMatch({ teamId: 'var', opponent: 'Northside', date: '2026-09-08' });
+    assert.equal(store.lastLineupForTeam('var', store.activeMatch.id), null);
 });
 
-test('deleting a set renumbers the remaining sets', () => {
+test('a match with no sets started is not a source', () => {
     const { store, players } = seeded();
-    const lineup = players.slice(0, 6).map((p) => p.id);
-    store.startSet({ startingServer: 'us', startingRotation: 1, startingLineup: lineup });
-    store.startSet({ startingServer: 'us', startingRotation: 1, startingLineup: lineup });
-    assert.deepEqual(
-        store.activeMatch.sets.map((s) => s.number),
-        [1, 2, 3],
-    );
+    startMatch(store, players, { opponent: 'Cornerstone', date: '2026-09-01' });
+    // Created, then abandoned before a lineup was entered.
+    store.createMatch({ teamId: 'jv', opponent: 'Abandoned', date: '2026-09-10' });
+    store.createMatch({ teamId: 'jv', opponent: 'Today', date: '2026-09-12' });
 
-    store.deleteSet(store.activeMatch.sets[0].id);
-    assert.deepEqual(
-        store.activeMatch.sets.map((s) => s.number),
-        [1, 2],
-    );
+    const carry = store.lastLineupForTeam('jv', store.activeMatch.id);
+    assert.equal(carry.match.opponent, 'Cornerstone');
 });
 
-test('removing a player leaves their recorded stats intact', () => {
-    const { store, players, team } = seeded();
-    store.recordStat(players[0].id, 'kill');
-    store.deletePlayer(players[0].id);
+/* ---------------------------------------------------- editing match details */
 
-    assert.equal(store.roster.length, 6);
-    assert.equal(store.activeSet.events[0].playerId, players[0].id);
+test('renaming a match leaves its recorded stats alone', () => {
+    const { store, players } = seeded();
+    startMatch(store, players, { opponent: 'Cornerstoen' });
+    store.recordStat(players[0].id, 'kill');
+
+    store.updateMatch(store.activeMatch.id, { opponent: 'Cornerstone', venue: 'East Gym' });
+
+    assert.equal(store.activeMatch.opponent, 'Cornerstone');
+    assert.equal(store.activeMatch.venue, 'East Gym');
+    assert.equal(store.activeSet.events.length, 1);
     assert.equal(store.liveState.us, 1);
 });

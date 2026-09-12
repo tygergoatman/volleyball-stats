@@ -24,17 +24,104 @@ export function renderLog(root, store, actions) {
     return root;
 }
 
+/**
+ * Fix the details that get typed in a loud gym: opponent, date, venue.
+ *
+ * **Only those three.** The team and the match format are deliberately not here:
+ * the team decides which roster every recorded stat belongs to, and the format
+ * decides which set is played to 15 — changing either after sets exist moves the
+ * ground under results already captured. Those stay set-once, as they are on the
+ * create screen.
+ *
+ * Everything editable here is a label. Nothing derived reads it, so a rename
+ * cannot change a score, and it is safe on a finished match.
+ */
+function openMatchDetailsSheet(store, match) {
+    const draft = { opponent: match.opponent, date: match.date, venue: match.venue ?? '' };
+
+    const body = el('div.form', {}, [
+        el('label.field', {}, [
+            el('span.field__label', { text: 'Opponent' }),
+            el('input.input', {
+                type: 'text',
+                placeholder: 'Opponent name',
+                value: draft.opponent,
+                onInput: (event) => {
+                    draft.opponent = event.target.value;
+                },
+            }),
+        ]),
+        el('div.form__row', {}, [
+            el('label.field.field--grow', {}, [
+                el('span.field__label', { text: 'Date' }),
+                el('input.input', {
+                    type: 'date',
+                    value: draft.date,
+                    onInput: (event) => {
+                        draft.date = event.target.value;
+                    },
+                }),
+            ]),
+            el('label.field.field--grow', {}, [
+                el('span.field__label', { text: 'Venue' }),
+                el('input.input', {
+                    type: 'text',
+                    placeholder: 'Gym',
+                    value: draft.venue,
+                    onInput: (event) => {
+                        draft.venue = event.target.value;
+                    },
+                }),
+            ]),
+        ]),
+        el('p.panel__hint', {
+            text: 'The team and match format are fixed once a match exists — they decide whose stats these are and which set plays to 15.',
+        }),
+        el('div.form__actions', {}, [
+            el('button.btn.btn--primary', {
+                type: 'button',
+                text: 'Save',
+                onClick: () => {
+                    const opponent = draft.opponent.trim();
+                    if (!opponent) {
+                        // Same floor as createMatch: a blank name would leave the
+                        // scoreboard and the share filename with nothing to show.
+                        toast('Give the opponent a name', 'warn');
+                        return;
+                    }
+                    store.updateMatch(match.id, {
+                        opponent,
+                        date: draft.date || match.date,
+                        venue: draft.venue.trim(),
+                    });
+                    closeSheet();
+                    toast('Match updated');
+                },
+            }),
+        ]),
+    ]);
+
+    openSheet({ title: 'Edit match details', subtitle: `${match.date} · vs ${match.opponent}`, body });
+}
+
 function matchPanel(store, match, actions) {
     const score = matchScore(match);
 
     return el('section.panel', {}, [
         el('div.panel__head', {}, [
             el('h2.panel__title', { text: `vs ${match.opponent}` }),
-            el('button.btn.btn--ghost.btn--sm', {
-                type: 'button',
-                text: 'Switch',
-                onClick: actions.pickMatch,
-            }),
+            el('div.panel__actions', {}, [
+                el('button.btn.btn--ghost.btn--sm', {
+                    type: 'button',
+                    text: 'Edit',
+                    onClick: () => openMatchDetailsSheet(store, match),
+                }),
+                el('button.btn.btn--ghost.btn--sm', {
+                    type: 'button',
+                    text: 'Switch',
+                    onClick: actions.pickMatch,
+                }),
+            ]),
         ]),
         el('p.panel__hint', {
             text: [match.date, match.venue, score.format.label, match.complete ? 'ended' : null]
