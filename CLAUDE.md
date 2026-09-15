@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.09.16b** (`js/version.js`).
+Current version: **2026.09.16c** (`js/version.js`).
 
 ## What this is
 
@@ -961,7 +961,7 @@ and knowing what to look at once it is on the phone.
 - **Name the version and say what it replaces**, since two zips a day happen and installing the older
   one silently undoes work.
 
-## The whiteboard (2026.09.16b)
+## The whiteboard (2026.09.16c)
 
 A landscape scratch surface for a timeout, reached from **☰ → Whiteboard** — both
 mid-match and with nothing running. Not a tab: the bar is five wide and every one
@@ -1042,6 +1042,21 @@ stale ink is worse than lost ink.
   may need removing and re-adding before a manifest change takes effect.
 - **The LIVE badge doubles as the way back.** The stepper is easy to wander off on
   and, without it, hard to find the way home from.
+- **A lineup and a rotation are a pair, and both branches of `chipsFor` have to
+  rotate.** Everything in `formations.js` reads the rotation as "which
+  serving-order slot each court position is holding" and the lineup as "who is
+  standing there". Out of game the roster's first six were handed over unrotated
+  under every rotation number, so the stepper drew rotation 1's board with
+  rotation 4's label — and in the **Rotation view, which is the lineup itself,
+  moved nobody at all**. The owner reported it as "the rotation slider isn't
+  moving players". The fallback six are now read as the lineup in rotation 1 and
+  rotated from there. `wb-rot.mjs` asserts all six rotations draw distinct boards,
+  in all three views, with and without a match.
+- **Base moves two chips per step, and that is correct.** Rotating swaps exactly
+  one player between the front and back row, so the base picture barely changes —
+  the setter is right back in rotations 1-3 whoever is serving. It reads as "the
+  stepper did nothing". Do not "fix" it; the Rotation view is the one that shows
+  the six slots turning.
 - Sub-plan badges come from `planPrompts`, not from re-reading the plan — so the
   board says exactly what the Court tab would prompt, including a sub that has
   moved to follow an ad-hoc swap.

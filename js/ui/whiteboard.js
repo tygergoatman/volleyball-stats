@@ -225,14 +225,21 @@ function chipsFor(store) {
     const live = set ? store.liveState : null;
     const lookup = (id) => store.player(id);
 
-    let lineup;
-    if (live) {
-        lineup = rotateLineupBy(live.lineup, board.rotation - live.rotation);
-    } else {
-        // No match running: the roster's first six, so the board is usable at
-        // the kitchen table. Six is the court; anybody else is bench.
-        lineup = store.roster.slice(0, 6).map((p) => p.id);
-    }
+    // No match running: the roster's first six, so the board is usable at the
+    // kitchen table. Six is the court; anybody else is bench.
+    const atRotationOne = live ? null : store.roster.slice(0, 6).map((p) => p.id);
+
+    // **Both branches must rotate.** A lineup and a rotation are a pair
+    // everywhere in `formations.js` — the rotation says which serving-order slot
+    // each court position is holding, and the lineup says who is standing there.
+    // Handing the same six over in the same order under every rotation number
+    // draws rotation 1's picture with rotation 4's label, and in the Rotation
+    // view — which is the lineup, unaltered — it draws *nothing* new at all. The
+    // stepper looked broken out of game for exactly this reason. The roster's
+    // first six are read as the lineup in rotation 1 and rotated from there.
+    const lineup = live
+        ? rotateLineupBy(live.lineup, board.rotation - live.rotation)
+        : rotateLineupBy(atRotationOne, board.rotation - 1);
 
     const points = formationPoints({
         lineup,
