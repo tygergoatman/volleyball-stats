@@ -21,8 +21,16 @@
 
 import { FRONT_ROW, pointFor } from './model.js';
 
-/** Substitutions allowed per set. NFHS; USAV and NCAA play 12. */
-export const SUB_LIMIT = 15;
+/**
+ * Substitutions allowed per set.
+ *
+ * 18 is what this team's association allows. Associations differ — NFHS is 18,
+ * USAV and NCAA play 12 — so this is the one place the number lives and every
+ * message that quotes it interpolates from here. It was hardcoded as `15` in
+ * five separate strings before, which is exactly how a rule change turns into a
+ * hunt.
+ */
+export const SUB_LIMIT = 18;
 
 export const SERVING_ORDER = ['I', 'II', 'III', 'IV', 'V', 'VI'];
 
@@ -171,7 +179,7 @@ export function liberoSheet(set, { liberoIds = [], subLimit = SUB_LIMIT } = {}) 
  *
  * `kind` is what the app records now. Falling back to "is either player a
  * libero" keeps sets recorded before the distinction existed from counting
- * every libero swap against the 15.
+ * every libero swap against the limit.
  */
 export function isLiberoReplacement(event, isLibero) {
     if (event?.kind === 'libero') return true;

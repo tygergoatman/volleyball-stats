@@ -7,6 +7,7 @@ import { renderRoster } from './ui/roster.js';
 import { renderStats } from './ui/statsview.js';
 import { renderLog } from './ui/log.js';
 import { renderSubs } from './ui/subs.js';
+import { openWhiteboard } from './ui/whiteboard.js';
 import { el, mount, $, openSheet, closeSheet, toast, confirmDialog } from './ui/dom.js';
 
 const store = new Store(window.localStorage);
@@ -120,6 +121,16 @@ const actions = {
     pickMatch() {
         const matches = store.state.matches.slice().reverse();
         const body = el('div.picker', {}, [
+            // Both ways in, mid-match and out of season. It is not a tab: the
+            // tab bar is five wide and every one of those is used every rally.
+            el('button.btn.btn--ghost', {
+                type: 'button',
+                text: '▦ Whiteboard',
+                onClick: () => {
+                    closeSheet();
+                    openWhiteboard(store);
+                },
+            }),
             ...matches.map((match) =>
                 el(
                     'button.picker__row',

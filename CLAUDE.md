@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.09.13a** (`js/version.js`).
+Current version: **2026.09.16a** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 39 tests — see the warning below
+node --test "tests/*.test.js"                          # 51 tests — see the warning below
 ```
 
 **The unit tests were lost and are not coming back on their own.** The remote working copy was
@@ -30,7 +30,7 @@ the owner still had the zip. Two consequences:
   tidy. The zip is the backup, and a backup that omits the tests is how this happened.
 - Rebuilding is happening **as code is touched**, not as one sitting: `privacy.test.js` first because
   it guards a hard constraint, then `model`, `store` and `stats` covering what 2026.09.12a and
-  2026.09.13a added. 39 tests, against 270 before — treat a green run as "the recent work is covered", not "the
+  2026.09.13a added. 51 tests, against 270 before — treat a green run as "the recent work is covered", not "the
   app is covered". Anything older than that is unguarded until someone writes it. The modules are
   intact and well commented, but some of the lost tests encoded decisions made in conversation, and
   those reasons live in this file rather than in the code.
@@ -102,80 +102,94 @@ Getting these wrong silently produced wrong statistics, which is worse than a cr
 - **Attack: `K` = kill, `A` = attack stays in play, `0` = attack error.** These were originally wired
   as K/0/A, which computed hitting percentage wrong for every rally logged as `A`.
 - **Pass `.5`** is an overpass to their side, rally continues. **Pass `0`** is a shank — point to them.
-- **`D` (dig) sits in the In rally row**, between `1` and `0`. It is a first contact like the ratings
-  beside it, but a dig is not a rated pass and is deliberately excluded from the in-rally average.
-  See the stat taxonomy section below.
+- **`D` (dig) sits in the Pass row**, between `.5` and `0`. It is the same first-contact decision,
+  but it counts as a dig and is deliberately excluded from the passing average.
 - **Every stat row ends on its one point-conceding button**, so all the red sits down the right-hand
   edge. A test enforces this — it is what makes the sheet readable at a glance mid-rally.
 - Hitting percentage is standard `(K − 0) / attempts` and can be negative.
 - Setter and libero come from `positions` (`S` / `L`) only. There were once separate boolean flags;
   two fields saying the same thing could disagree, so they were collapsed.
 
-## The stat taxonomy (2026.09.13a)
+## The substitution limit lives in one place (2026.09.14a)
 
-Seven rows on the stat sheet. It fits a Pixel 5 without scrolling — 552px of 727
-— which was checked before building, not after.
+`SUB_LIMIT` in `libero.js`, now **18** — what this team's association allows.
+Associations differ (NFHS 18, USAV and NCAA 12), and the number reaches the
+screen in five separate messages, so every one of them interpolates the constant
+rather than spelling a digit. It was hardcoded in all five before, which is
+exactly how a rule change becomes a hunt.
 
-**Serve receive and in-rally passing are different rows**, because they are
-different decisions against different balls. The owner's correction, and it was
-right: *"a serve receive isn't a dig, and in rally passing gets a lot of free
-balls which I also wouldn't count as digs."* An earlier proposal here collapsed
-in-rally passing into digging; that was wrong and would have inflated both.
+The counter row wraps, so a longer limit costs no layout work.
 
-So three first-contact contexts, not two:
+Note the other `15` in this codebase is unrelated: the **deciding set is played
+to 15**. Do not fold the two together.
 
-| Row           | Buttons         | What it is                                   |
-| ------------- | --------------- | -------------------------------------------- |
-| **Serve Rcv** | `3 2 1 .5 0`    | receiving serve                              |
-| **In rally**  | `3 2 1 D 0`     | free/easy balls rated, `D` the dig off a swing |
+## The stat taxonomy
 
-`D` stays out of the in-rally average: a dig is not a rated pass, and counting
-it as one drags the average around. A test pins that.
+Six rows on the stat sheet: **Pass** (`3 2 1 .5 D 0`), Set, Attack, Block, Serve,
+**Fault**. 486px of a 727px screen, no scrolling.
 
-**`derive` returns three averages**: `receiveAvg`, `rallyAvg`, and a combined
-`passAvg` over every ball played up. The combined one is not redundant — matches
-recorded before this have everything under `receive`, so it is the only number
-that stays comparable across the switchover. The owner asked for exactly that:
-aggregate for the season, split for finding where the errors are. Do not remove
-it to tidy up.
+### Passing was split in two for two days, and put back
 
-**Faults are a row of their own**, all point-conceding, so it is entirely red —
-the "red on the right" convention taken to its limit rather than broken.
-`faultNet`, `faultUnder`, `faultDouble`, chosen by the owner from a longer list
-because six rarely-tapped buttons cost more than they return.
+2026.09.13a made Serve Rcv and In rally separate rows, on the reasoning that
+receiving serve and playing up a free ball are different jobs. That reasoning is
+still sound and the owner had corrected an earlier, worse proposal to get there.
+**They used it and did not like it**, and one line came back in 2026.09.15a.
 
-**Out of rotation is deliberately not in that row.** It is a lineup fault, not
-one player's, so it is a `TEAM_EVENT` with `fault: true` and lives at the bottom
-of the Court tab beside End Set. It happens a handful of times a season and does
-not earn space in the dock.
+Worth recording because it is the kind of thing that gets re-proposed: the
+argument for splitting is good on paper and lost in practice. A row the coach has
+to *classify* into before tapping is slower than one they just tap, and mid-rally
+the classification is not obvious — which is why the split cost more than the
+granularity returned. Do not re-split without the owner asking.
 
-That `fault` flag fixes a real misattribution: **every team event scoring for
-them used to count as them _earning_ it**, so our own lineup fault flattered the
+**The `rally*` codes still aggregate.** Matches captured in those two days hold
+them, and `APPLY` folds them into the same passing line rather than dropping
+them, so nothing silently zeroes and no migration was needed. A test pins it.
+Do not delete those four handlers to tidy up.
+
+### Every row is tinted by its own accent
+
+Neutral buttons carry a 20% wash of their group's accent, so the block you are
+aiming at is identifiable before you read a label. One `--accent` variable per
+group and a single shared rule, so a new row only has to name its colour.
+
+**Kept deliberately low-saturation.** `--attack` is the same green as `--good`
+and `--serve` the same amber as `--warn`, so at any real strength a neutral
+button starts reading as a scoring one — and "the bright fill means this ended
+the rally" is the more load-bearing signal. Those two rows are the weakest of
+the six for exactly that reason; Pass, Set and Block separate cleanly. If the
+attack row ever needs more separation, give it a tint hue distinct from
+`--good` rather than turning the percentage up.
+
+### Faults
+
+`faultNet`, `faultUnder`, `faultDouble` — chosen by the owner from a longer list,
+because six rarely-tapped buttons cost more than they return. The whole row
+concedes, so it is entirely red: the "red on the right" convention taken to its
+limit rather than broken.
+
+**Out of rotation is deliberately not in that row.** It is a lineup fault, not one
+player's, so it is a `TEAM_EVENT` with `fault: true` and lives at the bottom of
+the Court tab beside End Set. It happens a handful of times a season and does not
+earn space in the dock.
+
+That `fault` flag fixes a real misattribution: **every team event scoring for them
+used to count as them _earning_ it**, so our own lineup fault flattered the
 opponent in the earned-vs-given-away panel — the one number the coach actually
 coaches from.
 
 ### Dead wiring removed
 
 `digErr` had an `APPLY` handler and a **Dig Err** CSV column, and no button
-anywhere could produce the code. The column could only ever read zero. The
-in-rally error is `rally0` now; `dig.errors` is gone.
-
-### The two rating rows are tinted apart
-
-`Serve Rcv` and `In rally` hold the same five labels in the same five places,
-one directly above the other — the pair a fast tap is most likely to confuse.
-The neutral buttons carry a low-saturation wash of their row's accent (blue,
-grey) instead of the shared surface colour. Deliberately subtle: it has to read
-at a glance without competing with the red and green, which mean something.
+anywhere could produce the code. The column could only ever read zero. Gone; a
+misplayed first contact is `pass0`.
 
 ### Stored codes, and what that costs
 
-Stat codes are **persisted**, so the taxonomy is expensive to change once a
-season is recorded — which is why this was mocked up and agreed before building.
-The in-rally ratings are new codes, so nothing already recorded moves: this
-season's serve-receive figures have in-rally passes mixed in up to the
-switchover, and the two are not comparable until a few matches are on the new
-split. The owner accepted that explicitly.
+Stat codes are **persisted**, so the taxonomy is expensive to change once a season
+is recorded. The split and its reversal both avoided a migration — the first by
+adding codes rather than moving any, the second by folding the added ones back in
+— but that was deliberate design each time, not luck. Mock up and agree a
+taxonomy change before building it.
 
 ## Positions are a list (schema v4)
 
@@ -238,7 +252,7 @@ substitution replaces a player in place, so the order never scrambles for the wh
 standing in court position `((k - rotations) mod 6) + 1`.
 
 **The only thing that must be recorded rather than derived is `kind: 'sub' | 'libero'` on the
-event**, because it cannot be inferred from the rally and it is what the 15-substitution limit turns
+event**, because it cannot be inferred from the rally and it is what the substitution limit turns
 on. Libero replacements are unlimited and count against nothing.
 
 Two rules the sheet enforces or flags:
@@ -478,9 +492,28 @@ Two rules: most recent **by date** (creation order only breaks a tie, since a
 forgotten match gets back-filled with an earlier date), and **all six must still
 be on the team or nothing is offered** — a partly filled court with silent gaps
 is worse than an empty one on a phone, and a set started five-a-side cannot be
-undone afterwards. Applying it resets the picker to rotation 1, because the
-stored lineup is already a court and rotating it again would move it off the
-arrangement being copied.
+undone afterwards.
+
+### The rotation travels with the court (fixed 2026.09.15b)
+
+The first version dropped the six in and reset the picker to **rotation 1**, on
+the reasoning that the stored lineup is already a court so rotating it would move
+it off the arrangement being copied. Half right: the court was correct and the
+*label* was wrong — and correcting the label then rotated all six off the
+arrangement that had just been copied. Reported after a match where set 1 opened
+on rotation 4 and set 2 had to be re-entered by hand.
+
+`lineupAsEntered(set)` in `model.js` returns both, and **undoes the their-serve
+shift** on the way out. That part is not decoration: choosing "they serve" moves
+the stored rotation and lineup back one, while the setup picker means *"the
+rotation as if we are serving"* and says so on screen. Feeding it the stored
+number would shift a second time the moment the opponent serves again — the same
+double-shift the setup warning exists to prevent, arriving through the back door.
+A browser check plays four sets to pin exactly that.
+
+**So: `set.startingRotation` is not what the coach typed** whenever the opponent
+opened the set. Anything replaying a set's setup into a new one wants
+`lineupAsEntered`, not the raw fields.
 
 ## Starting rotation
 
@@ -693,7 +726,7 @@ Two things that go with it, and should not be removed:
   It keeps a picker of its own for the weeks somebody runs two teams, shown only while no match is
   open — once one is running the team is settled by the match, and offering a different one here
   would just be a way to edit the wrong plan.
-- Libero replacements are unlimited, so the "costs N of 15" note counts scheduled subs only — the
+- Libero replacements are unlimited, so the "costs N of 18" note counts scheduled subs only — the
   same rule the tracking sheet enforces.
 
 ## Points earned vs given away (Stats tab)
@@ -926,6 +959,58 @@ and knowing what to look at once it is on the phone.
   is the scannable summary, so a handful of lines is right.
 - **Name the version and say what it replaces**, since two zips a day happen and installing the older
   one silently undoes work.
+
+## The whiteboard (2026.09.16a)
+
+A landscape scratch surface for a timeout, reached from **☰ → Whiteboard** — both
+mid-match and with nothing running. Not a tab: the bar is five wide and every one
+of those is tapped every rally.
+
+**What makes it worth more than the board in the bag:** it opens on the real six,
+in the real rotation, with real numbers and position colours. A whiteboard starts
+blank every single time.
+
+### Nothing is stored, and that is the whole design
+
+The owner asked for a scratchpad, and taking that literally is what keeps this
+feature cheap. `js/ui/whiteboard.js` holds one module-level `board` object for as
+long as the app is open — the same trick the Court tab uses for its chosen
+formation. **No store changes, no schema version, no migration, nothing to back
+up**, and no chance of a drawing outliving the reason for it.
+
+**Ink clears when the rotation changes.** Also the owner's call. It clears on a
+*view* change too, which was mine: Base and Serve Rcv put the same six in very
+different places, so ink drawn against one points at nothing in the other, and
+stale ink is worse than lost ink.
+
+### Decisions worth keeping
+
+- **Move is a tool.** Chips and ink both want the same pointer, so exactly one
+  owns it at a time — `.wb__court--drawing` flips `pointer-events` between the
+  two layers. Without a mode you cannot draw *across* a player, which is most of
+  what a coach draws.
+- **Tap the bank to add, then drag to place.** A drag out of a narrow rail is a
+  fiddly gesture on a phone and easy to start by accident while scrolling it. Two
+  deliberate actions beat one delicate one. An opponent chip lands on *their* side
+  of the net; everything else on ours.
+- **Erase is a mode, not a rubber.** Tap the mark you want gone. A rubber that
+  follows a finger deletes whatever it brushes past.
+- **Undo / Erase / Clear sit three-across.** Stacked, they pushed Clear off the
+  bottom of a 353px rail — reachable only by scrolling a narrow strip to find the
+  button you want when you have five seconds. Caught in a browser, not by a test.
+- **Ink is stored in a fixed 1000×1000 space** and drawn with
+  `preserveAspectRatio="none"`, so strokes stay put when the court resizes.
+- **The LIVE badge doubles as the way back.** The stepper is easy to wander off on
+  and, without it, hard to find the way home from.
+- Sub-plan badges come from `planPrompts`, not from re-reading the plan — so the
+  board says exactly what the Court tab would prompt, including a sub that has
+  moved to follow an ad-hoc swap.
+
+### Not built, deliberately
+
+Saved plays, a scouted opponent roster, and sharing a board as an image. All were
+raised and set aside: the owner wanted a scratchpad for their own eyes. Each would
+need storage, which is the thing this feature currently gets to skip.
 
 ## Open work
 

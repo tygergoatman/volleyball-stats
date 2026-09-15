@@ -8,66 +8,40 @@ import { STAT_BY_CODE, TEAM_EVENT_BY_CODE, computeSetState, pointFor } from './m
 /** An empty stat line for one player (or for the team as a whole). */
 export function emptyLine() {
     return {
-        // Receiving serve and playing a ball up in a live rally are different
-        // decisions against different balls, so they are counted apart. `derive`
-        // still adds them back together for a whole-season "all passes" number.
-        receive: { att: 0, total: 0, zero: 0, half: 0, one: 0, two: 0, three: 0 },
-        rally: { att: 0, total: 0, zero: 0, one: 0, two: 0, three: 0 },
+        pass: { att: 0, total: 0, zero: 0, half: 0, one: 0, two: 0, three: 0 },
         attack: { att: 0, kills: 0, errors: 0, inPlay: 0 },
         set: { att: 0, total: 0, errors: 0 },
         serve: { att: 0, aces: 0, errors: 0, inPlay: 0 },
         block: { solo: 0, assist: 0, errors: 0 },
-        // A dig is defending a swing. Free balls are `rally`, not digs — that
-        // distinction is the whole reason the two rows exist.
         dig: { digs: 0 },
         fault: { net: 0, under: 0, double: 0 },
     };
 }
 
+/** One passing attempt at a given rating. */
+function rate(line, value, bucket) {
+    line.pass.att += 1;
+    line.pass.total += value;
+    line.pass[bucket] += 1;
+}
+
 const APPLY = {
-    pass3: (line) => {
-        line.receive.att += 1;
-        line.receive.total += 3;
-        line.receive.three += 1;
-    },
-    pass2: (line) => {
-        line.receive.att += 1;
-        line.receive.total += 2;
-        line.receive.two += 1;
-    },
-    pass1: (line) => {
-        line.receive.att += 1;
-        line.receive.total += 1;
-        line.receive.one += 1;
-    },
-    pass05: (line) => {
-        line.receive.att += 1;
-        line.receive.total += 0.5;
-        line.receive.half += 1;
-    },
-    pass0: (line) => {
-        line.receive.att += 1;
-        line.receive.zero += 1;
-    },
-    rally3: (line) => {
-        line.rally.att += 1;
-        line.rally.total += 3;
-        line.rally.three += 1;
-    },
-    rally2: (line) => {
-        line.rally.att += 1;
-        line.rally.total += 2;
-        line.rally.two += 1;
-    },
-    rally1: (line) => {
-        line.rally.att += 1;
-        line.rally.total += 1;
-        line.rally.one += 1;
-    },
-    rally0: (line) => {
-        line.rally.att += 1;
-        line.rally.zero += 1;
-    },
+    pass3: (line) => rate(line, 3, 'three'),
+    pass2: (line) => rate(line, 2, 'two'),
+    pass1: (line) => rate(line, 1, 'one'),
+    pass05: (line) => rate(line, 0.5, 'half'),
+    pass0: (line) => rate(line, 0, 'zero'),
+
+    // 2026.09.13a briefly split passing into serve-receive and in-rally rows,
+    // and 2026.09.15a put it back to one. Any match recorded in between holds
+    // these codes, so they fold into the same passing line rather than being
+    // dropped — the numbers stay whole and no migration is needed. Do not
+    // delete these: deleting them silently zeroes those matches.
+    rally3: (line) => rate(line, 3, 'three'),
+    rally2: (line) => rate(line, 2, 'two'),
+    rally1: (line) => rate(line, 1, 'one'),
+    rally0: (line) => rate(line, 0, 'zero'),
+
     faultNet: (line) => {
         line.fault.net += 1;
     },
@@ -278,14 +252,7 @@ export function totalLine(lines) {
  * there are no attempts, so the UI can render "—" instead of a misleading zero.
  */
 export function derive(line) {
-    const receiveAvg = line.receive.att ? line.receive.total / line.receive.att : null;
-    const rallyAvg = line.rally.att ? line.rally.total / line.rally.att : null;
-    // Every ball played up, however it arrived. Kept because the split only
-    // exists from 2026.09.13a onward: matches recorded before it have all their
-    // passes under `receive`, so this is the one number that stays comparable
-    // across the whole season.
-    const passAtt = line.receive.att + line.rally.att;
-    const passAvg = passAtt ? (line.receive.total + line.rally.total) / passAtt : null;
+    const passAvg = line.pass.att ? line.pass.total / line.pass.att : null;
     const attackAtt = line.attack.att;
     const hitPct = attackAtt ? (line.attack.kills - line.attack.errors) / attackAtt : null;
     const killPct = attackAtt ? line.attack.kills / attackAtt : null;
@@ -297,11 +264,7 @@ export function derive(line) {
 
     return {
         passAvg,
-        passAtt,
-        receiveAvg,
-        receiveAtt: line.receive.att,
-        rallyAvg,
-        rallyAtt: line.rally.att,
+        passAtt: line.pass.att,
         hitPct,
         killPct,
         attackAtt,
@@ -319,8 +282,7 @@ export function derive(line) {
             line.serve.errors +
             line.set.errors +
             line.block.errors +
-            line.receive.zero +
-            line.rally.zero +
+            line.pass.zero +
             line.fault.net +
             line.fault.under +
             line.fault.double,
@@ -364,23 +326,13 @@ export function rotationBreakdown(sets) {
 const CSV_COLUMNS = [
     ['#', (player) => player.number],
     ['Name', (player) => player.name],
-    // Every ball played up, so a season that straddles the receive/rally split
-    // still has one comparable passing number.
-    ['Pass Att', (_p, _line, d) => d.passAtt],
+    ['Pass Att', (_p, line) => line.pass.att],
     ['Pass Avg', (_p, _line, d) => fmtNumber(d.passAvg, 2)],
-    ['Rcv Att', (_p, line) => line.receive.att],
-    ['Rcv Avg', (_p, _line, d) => fmtNumber(d.receiveAvg, 2)],
-    ['Rcv 3', (_p, line) => line.receive.three],
-    ['Rcv 2', (_p, line) => line.receive.two],
-    ['Rcv 1', (_p, line) => line.receive.one],
-    ['Rcv .5', (_p, line) => line.receive.half],
-    ['Rcv Err', (_p, line) => line.receive.zero],
-    ['Rally Att', (_p, line) => line.rally.att],
-    ['Rally Avg', (_p, _line, d) => fmtNumber(d.rallyAvg, 2)],
-    ['Rally 3', (_p, line) => line.rally.three],
-    ['Rally 2', (_p, line) => line.rally.two],
-    ['Rally 1', (_p, line) => line.rally.one],
-    ['Rally Err', (_p, line) => line.rally.zero],
+    ['Pass 3', (_p, line) => line.pass.three],
+    ['Pass 2', (_p, line) => line.pass.two],
+    ['Pass 1', (_p, line) => line.pass.one],
+    ['Pass .5', (_p, line) => line.pass.half],
+    ['Pass 0', (_p, line) => line.pass.zero],
     ['Kills (K)', (_p, line) => line.attack.kills],
     ['Attack In Play (A)', (_p, line) => line.attack.inPlay],
     ['Attack Err (0)', (_p, line) => line.attack.errors],

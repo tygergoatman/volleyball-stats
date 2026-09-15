@@ -235,30 +235,19 @@ export function isLibero(player) {
  */
 export const STAT_GROUPS = [
     {
-        key: 'receive',
-        label: 'Serve Rcv',
+        key: 'pass',
+        label: 'Pass',
         accent: 'pass',
         options: [
             { code: 'pass3', label: '3', value: 3, point: null, name: 'Perfect pass' },
             { code: 'pass2', label: '2', value: 2, point: null, name: 'Good pass' },
             { code: 'pass1', label: '1', value: 1, point: null, name: 'Poor pass' },
             { code: 'pass05', label: '.5', value: 0.5, point: null, name: 'Overpass to their side' },
-            { code: 'pass0', label: '0', value: 0, point: 'them', name: 'Shank / ace against' },
-        ],
-    },
-    {
-        // First contact in a live rally, which is not the same decision as
-        // receiving serve — and a free ball is not a dig. Rated on the same
-        // scale so the two averages are comparable; `D` is the dig off a swing.
-        key: 'rally',
-        label: 'In rally',
-        accent: 'dig',
-        options: [
-            { code: 'rally3', label: '3', value: 3, point: null, name: 'Perfect in-rally pass' },
-            { code: 'rally2', label: '2', value: 2, point: null, name: 'Good in-rally pass' },
-            { code: 'rally1', label: '1', value: 1, point: null, name: 'Poor in-rally pass' },
+            // Sits with the passes because it is the same first-contact decision,
+            // but it counts as a dig and stays out of the passing average. Placed
+            // before the shank so every row ends on its one point-conceding button.
             { code: 'dig', label: 'D', point: null, name: 'Dig' },
-            { code: 'rally0', label: '0', value: 0, point: 'them', name: 'In-rally passing error' },
+            { code: 'pass0', label: '0', value: 0, point: 'them', name: 'Shank / pass error' },
         ],
     },
     {
@@ -461,6 +450,36 @@ export function rotateLineup(lineup) {
  * @param {number} count may be negative
  * @returns {Array<string|null>} a new array
  */
+/**
+ * A set's starting court and rotation **as the coach entered them at setup**.
+ *
+ * Not the same as reading `startingLineup` and `startingRotation` straight off
+ * the set. Choosing "they serve" shifts both back one rotation — that is the
+ * whole point of `setStartingServer` — so a set the opponent opened is stored
+ * one rotation behind what was typed.
+ *
+ * The setup screen's rotation picker means "the rotation as if we are serving",
+ * and says so on screen. Feeding it a stored, already-shifted number is a
+ * category error: pick "they serve" again in the next set and the shift applies
+ * a second time. This undoes it, so what goes into the picker is what came out
+ * of it.
+ *
+ * Used by the "use that lineup again" buttons, which are the only place a
+ * previous set's setup gets replayed into a new one.
+ *
+ * @param {object} set
+ * @returns {{lineup: Array<string|null>, rotation: number}}
+ */
+export function lineupAsEntered(set) {
+    const lineup = (set?.startingLineup ?? []).slice();
+    const rotation = clampRotation(set?.startingRotation, 1);
+    if (set?.startingServer !== 'them') return { lineup, rotation };
+    return {
+        lineup: rotateLineupBy(lineup, 1),
+        rotation: (rotation % 6) + 1,
+    };
+}
+
 /**
  * A rotation number that is definitely 1-6, falling back rather than throwing.
  *

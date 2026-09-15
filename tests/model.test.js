@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computeSetState, describeEvent, pointFor, rotateLineupBy } from '../js/model.js';
+import { computeSetState, describeEvent, lineupAsEntered, pointFor, rotateLineupBy } from '../js/model.js';
 
 const SIX = ['a', 'b', 'c', 'd', 'e', 'f'];
 
@@ -110,4 +110,52 @@ test('corrections do not survive into the next set', () => {
     // Nothing to reset: a new set is a new event list, which is the whole
     // mechanism.
     assert.equal(computeSetState(set([])).rotation, 1);
+});
+
+/* --------------------------------------- replaying a lineup into a new set */
+
+const SIX_IDS = ['a', 'b', 'c', 'd', 'e', 'f'];
+
+test('a lineup we served for comes back exactly as entered', () => {
+    const entered = lineupAsEntered({
+        startingLineup: SIX_IDS.slice(),
+        startingRotation: 4,
+        startingServer: 'us',
+    });
+
+    assert.equal(entered.rotation, 4, 'the rotation travels with the court');
+    assert.deepEqual(entered.lineup, SIX_IDS, 'and the court is untouched');
+});
+
+test('the their-serve shift is undone, so the picker gets what it means', () => {
+    // Choosing "they serve" moved both back one when the set started. The setup
+    // picker means "the rotation as if we are serving", so handing it the stored
+    // number would shift a second time the moment they serve again.
+    const stored = {
+        startingLineup: rotateLineupBy(SIX_IDS, -1),
+        startingRotation: 3,
+        startingServer: 'them',
+    };
+    const entered = lineupAsEntered(stored);
+
+    assert.equal(entered.rotation, 4);
+    assert.deepEqual(entered.lineup, SIX_IDS);
+});
+
+test('undoing the shift wraps at the ends', () => {
+    assert.equal(lineupAsEntered({ startingRotation: 6, startingServer: 'them' }).rotation, 1);
+    assert.equal(lineupAsEntered({ startingRotation: 1, startingServer: 'them' }).rotation, 2);
+});
+
+test('a set with nothing recorded does not throw', () => {
+    // Replay must never blow up on a half-built set: the carry-over button reads
+    // whatever the last set happens to hold.
+    assert.deepEqual(lineupAsEntered({}), { lineup: [], rotation: 1 });
+    assert.deepEqual(lineupAsEntered(undefined), { lineup: [], rotation: 1 });
+});
+
+test('a malformed rotation falls back rather than throwing', () => {
+    for (const rotation of [0, 7, 'four', null, NaN]) {
+        assert.equal(lineupAsEntered({ startingRotation: rotation }).rotation, 1);
+    }
 });

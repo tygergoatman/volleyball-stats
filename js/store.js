@@ -15,6 +15,7 @@ import {
     SCHEMA_VERSION,
     computeSetState,
     isLibero,
+    lineupAsEntered,
     rotateLineupBy,
     sortPositions,
     targetForSet,
@@ -645,7 +646,7 @@ export class Store {
      * @param {string} teamId
      * @param {string|null} excludeMatchId the match being set up, skipped so
      *   this only ever answers about earlier ones
-     * @returns {{lineup: string[], match: object}|null}
+     * @returns {{lineup: string[], rotation: number, match: object}|null}
      */
     lastLineupForTeam(teamId, excludeMatchId = null) {
         if (!teamId) return null;
@@ -663,9 +664,13 @@ export class Store {
 
         for (const { match } of candidates) {
             for (let i = match.sets.length - 1; i >= 0; i -= 1) {
-                const lineup = match.sets[i].startingLineup ?? [];
+                const set = match.sets[i];
+                const lineup = set.startingLineup ?? [];
                 if (lineup.length === 6 && lineup.every((id) => id && eligible.has(id))) {
-                    return { lineup: lineup.slice(), match };
+                    // The rotation travels with the court. Without it the next
+                    // set opens on rotation 1 and every player has to be moved
+                    // by hand — which is the bug this carried for three days.
+                    return { ...lineupAsEntered(set), match };
                 }
             }
         }

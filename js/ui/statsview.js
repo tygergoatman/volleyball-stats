@@ -21,14 +21,13 @@ import { el, mount, toast, downloadText } from './dom.js';
  * applies to the season scope — set and match scopes take their team from the
  * open match.
  */
-const view = { scope: 'set', category: 'receive', teamId: null, sort: null };
+const view = { scope: 'set', category: 'pass', teamId: null, sort: null };
 
 /** The player column's heading, which sorts by jersey number rather than a stat. */
 const PLAYER_COLUMN = 'Player';
 
 const CATEGORIES = [
-    { key: 'receive', label: 'Serve Rcv' },
-    { key: 'rally', label: 'In Rally' },
+    { key: 'pass', label: 'Pass' },
     { key: 'attack', label: 'Attack' },
     { key: 'set', label: 'Set' },
     { key: 'serve', label: 'Serve' },
@@ -41,25 +40,14 @@ const CATEGORIES = [
  * metrics; `key` marks the column the table sorts by (descending).
  */
 const COLUMNS = {
-    receive: [
-        { label: 'Att', read: (line) => line.receive.att },
-        { label: 'Avg', read: (line, d) => formatAvg(d.receiveAvg), sort: (line, d) => d.receiveAvg ?? -1, primary: true },
-        { label: '3', read: (line) => line.receive.three },
-        { label: '2', read: (line) => line.receive.two },
-        { label: '1', read: (line) => line.receive.one },
-        { label: '.5', read: (line) => line.receive.half },
-        { label: 'Err', read: (line) => line.receive.zero, bad: true },
-    ],
-    rally: [
-        { label: 'Att', read: (line) => line.rally.att },
-        { label: 'Avg', read: (line, d) => formatAvg(d.rallyAvg), sort: (line, d) => d.rallyAvg ?? -1, primary: true },
-        { label: '3', read: (line) => line.rally.three },
-        { label: '2', read: (line) => line.rally.two },
-        { label: '1', read: (line) => line.rally.one },
-        { label: 'Err', read: (line) => line.rally.zero, bad: true },
-        // The one number that spans the taxonomy change, so a season recorded
-        // either side of it still compares.
-        { label: 'All Pass', read: (line, d) => formatAvg(d.passAvg), sort: (line, d) => d.passAvg ?? -1 },
+    pass: [
+        { label: 'Att', read: (line) => line.pass.att },
+        { label: 'Avg', read: (line, d) => formatAvg(d.passAvg), sort: (line, d) => d.passAvg ?? -1, primary: true },
+        { label: '3', read: (line) => line.pass.three },
+        { label: '2', read: (line) => line.pass.two },
+        { label: '1', read: (line) => line.pass.one },
+        { label: '.5', read: (line) => line.pass.half },
+        { label: '0', read: (line) => line.pass.zero, bad: true },
     ],
     attack: [
         { label: 'K', read: (line) => line.attack.kills, primary: true },
@@ -478,8 +466,7 @@ function sortValue(column, row) {
 /** True when a player has at least one recorded action in this line. */
 function hasData(line) {
     return (
-        line.receive.att > 0 ||
-        line.rally.att > 0 ||
+        line.pass.att > 0 ||
         line.attack.att > 0 ||
         line.set.att > 0 ||
         line.serve.att > 0 ||

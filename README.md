@@ -220,23 +220,19 @@ undo and mid-log deletion always leave the score, rotation and lineup exactly ri
 
 ### What gets tracked
 
-First contact is split three ways, because they are different jobs:
-
-- **Serve Rcv** — `3 2 1 .5 0`, receiving serve. The classic passing average.
-- **In rally** — `3 2 1 D 0`. Free and easy balls get rated on the same scale; `D` is a dig off an
-  actual swing. A dig is not a rated pass, so it stays out of the in-rally average.
+- **Pass** — `3 2 1 .5 D 0`. One line for every first contact, serve receive and in rally alike. `D`
+  is a dig and stays out of the passing average; `0` is a shank.
 - **Fault** — `Net`, `Under`, `Double`. All concede the point, so the whole row is red.
-
-The two rating rows are tinted differently — blue for serve receive, grey for in rally — because they
-hold the same five labels in the same five places and are easy to mix up at speed.
 
 **Out of rotation** is a team fault rather than one player's, so it is not in the Fault row. It sits
 at the bottom of the Court tab beside End Set, and scores a point for the other team.
 
-The Stats tab carries the split through: **Serve Rcv**, **In Rally** and **Faults** are their own
-views, and the In Rally view has an **All Pass** column combining both — so a season recorded either
-side of this change still has one comparable passing number. All four faults count as points you
-gave away rather than points they earned.
+All four faults count as points you gave away rather than points they earned, in the Stats tab's
+points breakdown.
+
+Each row's buttons are tinted with that row's colour, so you can find the block you want before
+reading any labels. The bright green and red fills still mean what they always did — this button
+ended the rally, one way or the other.
 
 | Outcome                                                                  | Result          |
 | ------------------------------------------------------------------------ | --------------- |
@@ -275,6 +271,9 @@ setting their serve — subtracts it twice and leaves you a rotation out.
 **Starting a new match?** The lineup screen offers the last lineup this team played, named by
 opponent, so set 1 does not mean retyping six players. It only appears when all six are still on the
 team.
+
+Either way the **rotation comes with it** — carry set 1's lineup into set 2 and you get the same six
+in the same places, still labelled the rotation you started in, ready to go without moving anybody.
 
 ### Who serves first
 
@@ -417,8 +416,11 @@ set. So the sheet is replayed from the same events as the score.
 
 **The one thing the app has to be told is whether a replacement was a libero swap or a
 substitution**, because that cannot be inferred from the rally and it is the distinction the rules
-turn on. A team gets 15 substitutions per set; libero replacements are unlimited and count against
-nothing. The counter across the top is the `Subs: 1..15` row off the paper sheet.
+turn on. A team gets 18 substitutions per set; libero replacements are unlimited and count against
+nothing. The counter at the bottom of the tab is the `Subs: 1..18` row off the paper sheet.
+
+If your association allows a different number — USAV and NCAA play 12 — it is the `SUB_LIMIT`
+constant in `js/libero.js`, and every message that mentions the limit reads from there.
 
 A libero may replace different players all set, but may serve in **only one** rotation. You never
 tell the app which — it is whichever rotation the libero first actually serves from, marked with a
@@ -495,6 +497,23 @@ open.
 Scheduled subs count against your 15 per set and the panel says how many; libero replacements are
 unlimited and cost nothing. A row naming somebody no longer on the roster is greyed rather than
 dropped, so you can decide whether it should go.
+
+## The whiteboard
+
+**☰ → Whiteboard.** A landscape scratch surface for a timeout — turn the phone sideways. It opens on
+your actual six in the rotation you are actually in, with their numbers and position colours.
+
+- **Views** — Base, Rotation and Serve Rcv, the same three as the Court tab.
+- **Rotation stepper** — walk through all six to talk through what is coming. **LIVE** shows when you
+  are on the rotation actually on court, and tapping **↺ live** brings you back.
+- **Sub plan** — an amber badge on the chip when a planned sub fires at the rotation you are looking at.
+- **Move** to drag players anywhere; **Arrow**, **Draw** and **Circle** to mark it up in six colours.
+- **Bank** on the left: bench players, a generic opponent, a ball and a target. Tap to drop one on,
+  then drag it. Double-tap to take it off again.
+- **Undo**, **Erase** (tap a mark to remove it) and **Clear**.
+
+**Nothing is saved.** Changing the rotation or the view wipes the board, and so does closing the app.
+It is a scratchpad on purpose — there is no library of saved plays and nothing to back up.
 
 ## Layout
 

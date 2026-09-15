@@ -166,7 +166,7 @@ export function planPrompts({ plan, lineup = [], rotation = 1, available = [], l
 }
 
 /**
- * How many of the set's 15 substitutions a plan would spend if every row fired.
+ * How many of the set's substitutions a plan would spend if every row fired.
  *
  * Libero replacements are unlimited and deliberately not counted — the same
  * rule the tracking sheet enforces.

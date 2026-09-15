@@ -19,6 +19,7 @@ import {
     TIMEOUTS_PER_SET,
     computeSetState,
     describeEvent,
+    lineupAsEntered,
     matchScore,
     positionOf,
     setWinner,
@@ -389,11 +390,11 @@ function setupSetPanel(store, actions) {
             // this team actually played, whenever that was.
             (() => {
                 const carry = previous
-                    ? { lineup: previous.startingLineup.slice(), label: 'Use previous set’s lineup' }
+                    ? { ...lineupAsEntered(previous), label: 'Use previous set’s lineup' }
                     : (() => {
                           const last = store.lastLineupForTeam(match.teamId, match.id);
                           return last
-                              ? { lineup: last.lineup, label: `Use last match’s lineup (vs ${last.match.opponent})` }
+                              ? { ...last, label: `Use last match’s lineup (vs ${last.match.opponent})` }
                               : null;
                       })();
                 return (
@@ -402,12 +403,13 @@ function setupSetPanel(store, actions) {
                         type: 'button',
                         text: carry.label,
                         onClick: () => {
-                            // Straight in as placed, then re-labelled as rotation
-                            // 1: the stored lineup is already a court, so rotating
-                            // it by the picker's current value would move it off
-                            // the arrangement being copied.
+                            // Court *and* rotation, together. Dropping the court
+                            // in and calling it rotation 1 was the reported bug:
+                            // the six were right, the label was wrong, and fixing
+                            // the label then rotated all six off the arrangement
+                            // that had just been copied.
                             draft.lineup = carry.lineup.slice();
-                            draft.startingRotation = 1;
+                            draft.startingRotation = carry.rotation;
                             rerender();
                         },
                     })

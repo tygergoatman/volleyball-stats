@@ -8,7 +8,7 @@
  * two ways of writing it.
  */
 
-import { SERVING_ORDER, liberoSheet } from '../libero.js';
+import { SERVING_ORDER, SUB_LIMIT, liberoSheet } from '../libero.js';
 import { POSITION_LABELS, isLibero, playerLabel } from '../model.js';
 import { plannedSubCost } from '../plan.js';
 import { el, mount, openSheet, closeSheet, toast, buzz } from './dom.js';
@@ -158,8 +158,8 @@ function planPanel(store) {
             el('p.panel__hint', {
                 text:
                     cost === 0
-                        ? 'Libero replacements are unlimited and cost nothing against the 15.'
-                        : `${cost} of the 15 substitutions per set, if every row is taken. Libero replacements cost nothing.`,
+                        ? `Libero replacements are unlimited and cost nothing against the ${SUB_LIMIT}.`
+                        : `${cost} of the ${SUB_LIMIT} substitutions per set, if every row is taken. Libero replacements cost nothing.`,
             }),
     ]);
 }
@@ -494,7 +494,7 @@ function openRowSheet(store, sheet, row) {
                     },
                 }),
             el('p.panel__hint', {
-                text: 'A libero replacement is unlimited and does not count against the 15.',
+                text: `A libero replacement is unlimited and does not count against the ${SUB_LIMIT}.`,
             }),
         );
     } else if (sheet.liberosOnCourt.length > 0) {
@@ -533,7 +533,7 @@ function openRowSheet(store, sheet, row) {
             }),
             sheet.subsLeft === 0 &&
                 el('p.panel__hint.panel__hint--warn', {
-                    text: 'All 15 are used. Recorded anyway if you go ahead — the sheet shows what happened, it does not referee.',
+                    text: `All ${SUB_LIMIT} are used. Recorded anyway if you go ahead — the sheet shows what happened, it does not referee.`,
                 }),
             bench.length === 0
                 ? el('p.panel__hint', { text: 'Nobody on the bench.' })

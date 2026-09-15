@@ -39,6 +39,7 @@
        Bubble depth is now scoped by `isolation` on the court and competes only
        with itself; these three are the app's own layers. */
     --z-tabs: 10;
+    --z-board: 90;
     --z-scrim: 100;
     --z-toast: 200;
 }
@@ -1156,25 +1157,46 @@ button:disabled {
     transform: scale(0.95);
 }
 
-/* Both rating rows carry five buttons, so their labels get a touch less type. */
-.statgroup--pass .statbtn,
-.statgroup--dig .statbtn {
+/* The pass row carries six buttons, so its labels get a touch less type. */
+.statgroup--pass .statbtn {
     font-size: 17px;
 }
 
-/* Serve Rcv and In rally hold the same five labels in the same five places, one
-   directly above the other — the two rows a fast tap is most likely to confuse.
-   So the neutral buttons carry a tint of their row's accent rather than the
-   shared grey. It is deliberately low-saturation: this has to read at a glance
-   without competing with the red and green that mean something. */
-.statgroup--pass .statbtn:not(.statbtn--good):not(.statbtn--bad) {
-    background: color-mix(in srgb, var(--pass) 22%, var(--surface-3));
-    border-color: color-mix(in srgb, var(--pass) 45%, var(--border));
+/* Every row's neutral buttons carry a wash of that row's own accent, so the
+   block you are aiming at is identifiable before you read a single label.
+   One variable per group rather than one rule per group: a new row only has to
+   name its accent.
+
+   Deliberately low-saturation, and the reason matters: `--attack` is the same
+   green as `--good` and `--serve` the same amber as `--warn`. At this strength
+   a neutral button reads as *which row* it belongs to, not as a scoring one —
+   the bright fills still mean "this ended the rally". Push these percentages up
+   and that distinction is the thing you lose first. */
+.statgroup--pass {
+    --accent: var(--pass);
+}
+.statgroup--set {
+    --accent: var(--set);
+}
+.statgroup--attack {
+    --accent: var(--attack);
+}
+.statgroup--block {
+    --accent: var(--block);
+}
+.statgroup--serve {
+    --accent: var(--serve);
+}
+.statgroup--dig {
+    --accent: var(--dig);
+}
+.statgroup--fault {
+    --accent: var(--bad);
 }
 
-.statgroup--dig .statbtn:not(.statbtn--good):not(.statbtn--bad) {
-    background: color-mix(in srgb, var(--dig) 20%, var(--surface-3));
-    border-color: color-mix(in srgb, var(--dig) 42%, var(--border));
+.statgroup .statbtn:not(.statbtn--good):not(.statbtn--bad) {
+    background: color-mix(in srgb, var(--accent, var(--surface-3)) 20%, var(--surface-3));
+    border-color: color-mix(in srgb, var(--accent, var(--border)) 42%, var(--border));
 }
 
 .statbtn--good {
@@ -2400,4 +2422,478 @@ button:disabled {
     font-weight: 600;
     color: var(--muted);
     font-size: 12px;
+}
+
+
+/* ------------------------------------------------------------- whiteboard */
+
+/* A full-bleed landscape surface, not a sheet: it replaces the app rather than
+   sitting over part of it, because every other screen is portrait and this one
+   is not. Below the scrim so a toast still lands on top of it. */
+.wb {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-board);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Dragging a chip must never be read as a page pan or a text selection. */
+    touch-action: none;
+    user-select: none;
+}
+
+body.wb-open {
+    overflow: hidden;
+}
+
+.wb__bar {
+    flex: none;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+
+.wb__back {
+    width: 30px;
+    height: 30px;
+    flex: none;
+    border-radius: 8px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 15px;
+}
+
+.wb__title {
+    font-weight: 800;
+    flex: none;
+}
+
+.wb__spacer {
+    flex: 1;
+}
+
+.wb__seg {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    flex: none;
+    background: var(--surface-2);
+    border-radius: 8px;
+}
+
+.wb__seg button {
+    padding: 4px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.wb__seg button.on {
+    background: var(--us);
+    color: #fff;
+}
+
+.wb__rot {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    flex: none;
+    background: var(--surface-2);
+    border-radius: 8px;
+}
+
+.wb__rot button {
+    padding: 4px 7px;
+    font-size: 13px;
+    color: var(--text);
+}
+
+.wb__rotn {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 0 4px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Says whether the board is showing the rotation actually on court. Once it is
+   not, the same spot becomes the way back — the stepper is easy to wander off
+   on and hard to find your way home from. */
+.wb__live {
+    flex: none;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--good);
+}
+
+.wb__live--off {
+    color: var(--muted);
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 5px 8px;
+}
+
+.wb__toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: none;
+    padding: 5px 9px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.wb__toggle.on {
+    color: var(--text);
+}
+
+.wb__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--border);
+}
+
+.wb__toggle.on .wb__dot {
+    background: var(--warn);
+}
+
+.wb__stage {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+
+.wb__rail {
+    flex: none;
+    width: 86px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 5px;
+    background: var(--surface);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+}
+
+.wb__rail--left {
+    border-right: 1px solid var(--border);
+}
+
+.wb__rail--right {
+    width: 78px;
+    border-left: 1px solid var(--border);
+}
+
+.wb__raillabel {
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-left: 2px;
+    margin-top: 2px;
+}
+
+.wb__chiprow {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.wb__chip {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 800;
+    color: #fff;
+    background: var(--us);
+    border: 2px solid rgba(255, 255, 255, 0.18);
+}
+
+.wb__chip--opp {
+    background: #4a5364;
+    color: #cfd6e2;
+}
+
+.wb__chip--ball {
+    background: #e8c547;
+    color: #23262d;
+}
+
+.wb__chip--cone {
+    background: none;
+    border-style: dashed;
+    border-color: var(--muted);
+    color: var(--muted);
+}
+
+.wb__hint {
+    margin: 2px 0 0;
+    font-size: 8px;
+    line-height: 1.3;
+    color: var(--muted);
+}
+
+.wb__tool {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 6px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.wb__tool.on {
+    background: var(--surface-3);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--us);
+}
+
+.wb__tool--danger {
+    color: var(--bad);
+}
+
+.wb__toolico {
+    font-size: 13px;
+}
+
+.wb__fixrow {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+}
+
+.wb__fix {
+    padding: 6px 0;
+    border-radius: 8px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.wb__fix.on {
+    background: var(--surface-3);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--us);
+}
+
+.wb__fix--danger {
+    color: var(--bad);
+}
+
+.wb__swatches {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.wb__sw {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+}
+
+.wb__sw.on {
+    border-color: #fff;
+}
+
+.wb__surface {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    place-items: center;
+    padding: 6px;
+}
+
+/* Their side is the top 22%, ours the rest — the split `chipsFor` maps court
+   points into. Change one and change the other. */
+.wb__court {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border: 1px solid #3c4a5a;
+    border-radius: 8px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #16232c 0%, #16232c 22%, #1d3a2e 22%, #16232c 100%);
+}
+
+.wb__their {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 22%;
+    background: rgba(255, 77, 141, 0.07);
+}
+
+.wb__theirlabel {
+    position: absolute;
+    top: 5px;
+    left: 8px;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: rgba(255, 77, 141, 0.75);
+}
+
+.wb__net {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 22%;
+    border-top: 3px dashed rgba(255, 255, 255, 0.55);
+}
+
+.wb__netlabel {
+    position: absolute;
+    top: calc(22% + 6px);
+    right: 8px;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.wb__attack {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 52%;
+    border-top: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.wb__pc {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    font-weight: 800;
+    color: #fff;
+    background: var(--us);
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    touch-action: none;
+}
+
+.wb__pcn {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.wb__pcp {
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    opacity: 0.85;
+}
+
+.wb__pcsub {
+    position: absolute;
+    bottom: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: var(--warn);
+    color: #23262d;
+    font-size: 8px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.wb__pc--drag {
+    box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--us) 55%, transparent),
+        0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.wb__pc--opp {
+    width: 44px;
+    height: 44px;
+    background: #4a5364;
+    color: #cfd6e2;
+    border-style: dashed;
+}
+
+.wb__pc--ball {
+    width: 34px;
+    height: 34px;
+    background: #e8c547;
+    color: #23262d;
+}
+
+.wb__pc--cone {
+    width: 34px;
+    height: 34px;
+    background: none;
+    border-style: dashed;
+    border-color: var(--muted);
+    color: var(--muted);
+}
+
+/* Inert while chips are being moved, so a drag never draws a line. */
+.wb__ink {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.wb__court--drawing .wb__ink {
+    pointer-events: auto;
+}
+
+.wb__court--drawing .wb__pc {
+    pointer-events: none;
+}
+
+.wb__stroke {
+    pointer-events: stroke;
+}
+
+.wb__turn {
+    display: none;
+}
+
+/* Portrait still works; it is just cramped, so say why rather than looking broken. */
+@media (orientation: portrait) {
+    .wb__turn {
+        display: block;
+        flex: none;
+        margin: 0;
+        padding: 4px;
+        text-align: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--warn);
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+    }
+
+    .wb__rail {
+        width: 62px;
+    }
+
+    .wb__rail--right {
+        width: 62px;
+    }
 }
