@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.09.16a** (`js/version.js`).
+Current version: **2026.09.16b** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 51 tests — see the warning below
+node --test "tests/*.test.js"                          # 54 tests — see the warning below
 ```
 
 **The unit tests were lost and are not coming back on their own.** The remote working copy was
@@ -30,8 +30,9 @@ the owner still had the zip. Two consequences:
   tidy. The zip is the backup, and a backup that omits the tests is how this happened.
 - Rebuilding is happening **as code is touched**, not as one sitting: `privacy.test.js` first because
   it guards a hard constraint, then `model`, `store` and `stats` covering what 2026.09.12a and
-  2026.09.13a added. 51 tests, against 270 before — treat a green run as "the recent work is covered", not "the
-  app is covered". Anything older than that is unguarded until someone writes it. The modules are
+  2026.09.13a added, and `sw.test.js` because the SHELL guard it describes had itself been lost.
+  54 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
+  covered". Anything older than that is unguarded until someone writes it. The modules are
   intact and well commented, but some of the lost tests encoded decisions made in conversation, and
   those reasons live in this file rather than in the code.
 
@@ -960,7 +961,7 @@ and knowing what to look at once it is on the phone.
 - **Name the version and say what it replaces**, since two zips a day happen and installing the older
   one silently undoes work.
 
-## The whiteboard (2026.09.16a)
+## The whiteboard (2026.09.16b)
 
 A landscape scratch surface for a timeout, reached from **☰ → Whiteboard** — both
 mid-match and with nothing running. Not a tab: the bar is five wide and every one
@@ -988,18 +989,57 @@ stale ink is worse than lost ink.
 - **Move is a tool.** Chips and ink both want the same pointer, so exactly one
   owns it at a time — `.wb__court--drawing` flips `pointer-events` between the
   two layers. Without a mode you cannot draw *across* a player, which is most of
-  what a coach draws.
+  what a coach draws. Move drags committed strokes as well as chips.
+- **A moved stroke keeps its points and carries an offset.** `stroke.tx/ty`,
+  applied as a `translate()` on the wrapping `<g>`. A two-hundred-point scribble
+  moves by changing two numbers, and moving something never quietly degrades what
+  was drawn.
+- **Every stroke is a `<g>` holding the ink and a fat transparent copy of it.**
+  The ink is 7px, which is nothing to hit with a thumb; the hit copy is 26px and
+  invisible, so tapping *near* a line counts. `.wb__stroke` is
+  `pointer-events: none` and `.wb__hit` is `pointer-events: stroke` — a child
+  opts back in even though the layer above it is inert, which is what lets a line
+  be tapped while the rest of the board stays reachable.
+- **Ink is painted under the chips**, so in Move mode a chip always wins the
+  pointer over a line lying across it. Drawing over a chip still works because
+  chips go inert while a drawing tool is selected.
+- **Erase is not a drawing tool**, despite acting on ink. The ink layer is a
+  full-court box, so leaving it live in erase mode swallowed every tap meant for a
+  chip underneath. `isDrawing()` excludes it, the layer goes inert, and an erase
+  tap falls through to whatever is actually under the finger.
+- **Taking a player off is `board.hidden`, not a lineup change.** They vanish from
+  the court and reappear in the bench rail — which needs no extra wiring, because
+  the rail is already "roster minus who is on the board". Nothing touches the set.
 - **Tap the bank to add, then drag to place.** A drag out of a narrow rail is a
   fiddly gesture on a phone and easy to start by accident while scrolling it. Two
   deliberate actions beat one delicate one. An opponent chip lands on *their* side
   of the net; everything else on ours.
-- **Erase is a mode, not a rubber.** Tap the mark you want gone. A rubber that
-  follows a finger deletes whatever it brushes past.
+- **Erase is a mode, not a rubber.** Tap the line, mark or player you want gone. A
+  rubber that follows a finger deletes whatever it brushes past. It is never
+  disabled, because there are always six players on the board to take off.
 - **Undo / Erase / Clear sit three-across.** Stacked, they pushed Clear off the
   bottom of a 353px rail — reachable only by scrolling a narrow strip to find the
   button you want when you have five seconds. Caught in a browser, not by a test.
 - **Ink is stored in a fixed 1000×1000 space** and drawn with
   `preserveAspectRatio="none"`, so strokes stay put when the court resizes.
+- **`.wb__ink` must carry explicit `width: 100%; height: 100%`.** An `<svg>` has
+  an intrinsic aspect ratio from its `viewBox`, so `position: absolute; inset: 0`
+  pins its corners but does *not* stretch it. It shipped 255×255 over a 257×776
+  court: the layer physically covered only the top third, so **the bottom of the
+  court could not be drawn on at all**, and strokes higher up landed squashed up
+  the screen from the finger. It went unnoticed because the first test asserted a
+  stroke *existed*, never *where it went* — assert position, not presence.
+- **Pointer maths goes through `svg.getScreenCTM().inverse()`**, never
+  `getBoundingClientRect()`. A rect is axis-aligned and knows nothing about the
+  90° turn, so the arithmetic silently swaps the axes; the CTM is the real
+  screen-to-user transform and is right in both orientations. (In a *test*, note
+  the mirror-image trap: `getBoundingClientRect()` on a turned element returns its
+  axis-aligned footprint — measure with `offsetWidth`/`offsetHeight`.)
+- **⟲ turns the board, and the manifest lets the phone turn.** `orientation` was
+  `"portrait"`, which locked the installed PWA and made "turn your phone sideways"
+  impossible to obey; it is now `"any"`. The ⟲ button is not redundant with that:
+  it is the answer for a phone whose rotation lock is on. An already-installed PWA
+  may need removing and re-adding before a manifest change takes effect.
 - **The LIVE badge doubles as the way back.** The stepper is easy to wander off on
   and, without it, hard to find the way home from.
 - Sub-plan badges come from `planPrompts`, not from re-reading the plan — so the

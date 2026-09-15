@@ -494,23 +494,29 @@ it. Editing keeps the row itself, so a prompt you had waved away stays waved awa
 A plan belongs to a team and is reused all season, and opens on whichever team you last picked on the
 Roster tab. If you run more than one, there is a picker at the top of the panel while no match is
 open.
-Scheduled subs count against your 15 per set and the panel says how many; libero replacements are
+Scheduled subs count against your 18 per set and the panel says how many; libero replacements are
 unlimited and cost nothing. A row naming somebody no longer on the roster is greyed rather than
 dropped, so you can decide whether it should go.
 
 ## The whiteboard
 
-**☰ → Whiteboard.** A landscape scratch surface for a timeout — turn the phone sideways. It opens on
-your actual six in the rotation you are actually in, with their numbers and position colours.
+**☰ → Whiteboard.** A landscape scratch surface for a timeout. It opens on your actual six in the
+rotation you are actually in, with their numbers and position colours. Turn the phone sideways, or
+tap **⟲** in the top bar to turn the board instead — which works even with the phone's rotation lock
+on.
 
 - **Views** — Base, Rotation and Serve Rcv, the same three as the Court tab.
 - **Rotation stepper** — walk through all six to talk through what is coming. **LIVE** shows when you
   are on the rotation actually on court, and tapping **↺ live** brings you back.
 - **Sub plan** — an amber badge on the chip when a planned sub fires at the rotation you are looking at.
 - **Move** to drag players anywhere; **Arrow**, **Draw** and **Circle** to mark it up in six colours.
+  Move drags the lines too — grab an arrow you drew a little short and slide it where you meant it.
 - **Bank** on the left: bench players, a generic opponent, a ball and a target. Tap to drop one on,
-  then drag it. Double-tap to take it off again.
-- **Undo**, **Erase** (tap a mark to remove it) and **Clear**.
+  then drag it.
+- **Double-tap anything on the court to take it off** — a mark, or one of your six. A player you take
+  off drops back into the bench rail, a tap from going on again, so you can show a rotation with
+  somebody out of it.
+- **Undo**, **Erase** (a mode: tap the line, mark or player you want gone) and **Clear**.
 
 **Nothing is saved.** Changing the rotation or the view wipes the board, and so does closing the app.
 It is a scratchpad on purpose — there is no library of saved plays and nothing to back up.

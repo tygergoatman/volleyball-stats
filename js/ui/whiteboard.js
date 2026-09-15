@@ -6,11 +6,11 @@
  * where a whiteboard starts blank every single time.
  *
  * **Nothing here is stored.** Not the ink, not where chips were dragged, not the
- * extras dropped on. It is a scratchpad by the owner's decision, and that keeps
- * it entirely outside the store: no schema change, no migration, nothing to back
- * up, and no risk of a stray drawing outliving the reason for it. State lives in
- * one module-level object for as long as the app is open, the same way the Court
- * tab's chosen formation does.
+ * extras dropped on, not who was taken off. It is a scratchpad by the owner's
+ * decision, and that keeps it entirely outside the store: no schema change, no
+ * migration, nothing to back up, and no risk of a stray drawing outliving the
+ * reason for it. State lives in one module-level object for as long as the app
+ * is open, the same way the Court tab's chosen formation does.
  *
  * **Ink clears when the rotation changes**, also the owner's call. It clears on a
  * view change too — Base and Serve Rcv put the same six in very different
@@ -31,6 +31,9 @@ const INKS = ['#ffffff', '#f59e0b', '#22c55e', '#ef4444', '#2f81f7', '#ff4d8d'];
  * Tools. `move` is not a drawing tool and that is the point: chips and ink both
  * want the same pointer, so exactly one of them owns it at a time. Without a
  * mode you cannot draw across a player, which is most of what a coach draws.
+ *
+ * Move moves marks *and* ink: an arrow drawn a little short is nudged rather
+ * than redrawn.
  */
 const TOOLS = [
     { key: 'move', label: 'Move', icon: '✥' },
@@ -57,6 +60,8 @@ function freshBoard(rotation) {
     return {
         view: 'base',
         rotation,
+        /** Rotated 90° on screen, rather than by turning the phone. */
+        turned: false,
         /** Whether the rotation still matches the live one. */
         live: true,
         showPlan: true,
@@ -66,6 +71,8 @@ function freshBoard(rotation) {
         strokes: [],
         /** Manual chip placement, by chip id. Overrides the formation. */
         moved: new Map(),
+        /** Player ids taken off the board by hand; they go back to the bench. */
+        hidden: new Set(),
         /** Marks tapped in from the bank. */
         extras: [],
     };
@@ -75,6 +82,7 @@ function freshBoard(rotation) {
 function wipe() {
     board.strokes = [];
     board.moved = new Map();
+    board.hidden = new Set();
     board.extras = [];
 }
 
@@ -105,13 +113,17 @@ function render(store) {
     if (!host) return;
     const { chips, planBy } = chipsFor(store);
 
+    // Everything lives inside one frame so that turning the board is a single
+    // transform on a single element, rather than something every child has to
+    // know about.
+    host.classList.toggle('wb--turned', board.turned);
     mount(
         host,
-        topBar(store),
-        el('div.wb__stage', {}, [bank(store), surface(store, chips, planBy), tools(store)]),
-        // The layout is landscape by design; portrait still works, it is just
-        // cramped. Saying so beats silently looking broken.
-        el('p.wb__turn', { text: 'Turn your phone sideways' }),
+        el('div.wb__frame', {}, [
+            topBar(store),
+            el('div.wb__stage', {}, [bank(store), surface(store, chips, planBy), tools(store)]),
+            el('p.wb__turnhint', { text: 'Cramped? Tap ⟲ to turn the board.' }),
+        ]),
     );
 }
 
@@ -123,6 +135,24 @@ function topBar(store) {
 
     return el('div.wb__bar', {}, [
         el('button.wb__back', { type: 'button', text: '☰', 'aria-label': 'Close whiteboard', onClick: closeWhiteboard }),
+
+        // Turning the board on screen rather than turning the phone. Needed
+        // because the manifest unlock only helps a phone whose auto-rotate is
+        // on, and plenty of people keep rotation locked — for them the board
+        // would otherwise be stuck in a portrait letterbox forever.
+        el('button.wb__back.wb__turnbtn', {
+            type: 'button',
+            class: board.turned ? 'on' : '',
+            text: '⟲',
+            title: board.turned ? 'Turn the board back' : 'Turn the board sideways',
+            'aria-label': board.turned ? 'Turn the board back' : 'Turn the board sideways',
+            'aria-pressed': board.turned ? 'true' : 'false',
+            onClick: () => {
+                board.turned = !board.turned;
+                rerender(store);
+            },
+        }),
+
         el('span.wb__title', { text: 'Whiteboard' }),
 
         el(
@@ -215,7 +245,7 @@ function chipsFor(store) {
     const chips = [];
     for (let position = 1; position <= 6; position++) {
         const id = lineup[position - 1];
-        if (!id) continue;
+        if (!id || board.hidden.has(id)) continue;
         const player = lookup(id);
         const point = points[id] ?? { x: 0.5, y: 0.5 };
         chips.push({
@@ -305,7 +335,7 @@ function bank(store) {
                 }),
             ),
         ),
-        el('p.wb__hint', { text: 'Tap to drop one on, then drag it.' }),
+        el('p.wb__hint', { text: 'Tap to add, drag to place. Double-tap anything to take it off.' }),
     ]);
 }
 
@@ -336,20 +366,32 @@ function addExtra(store, spec) {
 
 /* ----------------------------------------------------------------- surface */
 
-function surface(store, chips, planBy) {
-    const drawing = board.tool !== 'move';
+/**
+ * Whether the pointer belongs to the ink layer.
+ *
+ * Erase is deliberately not a drawing tool here even though it acts on ink: the
+ * layer is a full-court box, so leaving it live would swallow every tap meant
+ * for a chip underneath. With it inert, an erase tap falls through to whatever
+ * is actually under the finger — a stroke's hit path, a mark, or a player.
+ */
+const isDrawing = () => board.tool !== 'move' && board.tool !== 'erase';
 
-    const court = el('div.wb__court', { class: drawing ? 'wb__court--drawing' : '' }, [
+function surface(store, chips, planBy) {
+    const court = el('div.wb__court', { class: isDrawing() ? 'wb__court--drawing' : '' }, [
         el('div.wb__their'),
         el('span.wb__theirlabel', { text: (store.activeMatch?.opponent ?? 'Them').toUpperCase() }),
         el('div.wb__net'),
         el('span.wb__netlabel', { text: 'NET' }),
         el('div.wb__attack'),
 
+        // Ink goes under the chips, both to look right — magnets on top of what
+        // is drawn — and so that in Move mode a chip always wins the pointer
+        // over a line lying across it. Drawing still works over a chip because
+        // chips go inert while a drawing tool is selected.
+        inkLayer(store),
+
         ...chips.map((chip) => chipNode(store, chip, planBy.get(chip.id))),
         ...board.extras.map((extra) => extraNode(store, extra)),
-
-        inkLayer(store),
     ]);
 
     return el('div.wb__surface', {}, [court]);
@@ -375,6 +417,21 @@ function chipNode(store, chip, plan) {
         ],
     );
     makeDraggable(store, node, (nx, ny) => board.moved.set(chip.id, { x: nx, y: ny }));
+
+    // Taking a six off the board is how you show what a rotation looks like with
+    // someone out of it. They drop back to the bench rail, a tap from returning.
+    const take = () => {
+        board.hidden.add(chip.id);
+        rerender(store);
+        toast(`${player?.number ?? 'Chip'} to the bench — tap the number to put them back`);
+    };
+    node.addEventListener('dblclick', take);
+    if (board.tool === 'erase') {
+        node.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+            take();
+        });
+    }
     return node;
 }
 
@@ -392,13 +449,41 @@ function extraNode(store, extra) {
         extra.x = nx;
         extra.y = ny;
     });
-    // A second tap takes it off again — the only way to remove one mark without
-    // clearing the board.
-    node.addEventListener('dblclick', () => {
+    // A second tap takes it off again, as does a tap in erase mode — either way
+    // one mark goes without clearing the board.
+    const take = () => {
         board.extras = board.extras.filter((e) => e.id !== extra.id);
         rerender(store);
-    });
+    };
+    node.addEventListener('dblclick', take);
+    if (board.tool === 'erase') {
+        node.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+            take();
+        });
+    }
     return node;
+}
+
+/**
+ * A client point in the court's own coordinates, as a fraction of its box.
+ *
+ * Goes through the ink layer's `getScreenCTM()` rather than doing the arithmetic
+ * against `getBoundingClientRect()`. That matters because the board can be
+ * rotated 90° by CSS: a rect is axis-aligned and knows nothing about the
+ * rotation, so `(clientX - left) / width` silently swaps the axes and everything
+ * lands sideways. The CTM is the actual transform from screen to user space, so
+ * it is right in both orientations and would stay right under any future scale
+ * or offset.
+ *
+ * @returns {{x: number, y: number}|null} null when the layer is not laid out yet
+ */
+function courtPoint(courtEl, clientX, clientY) {
+    const svg = courtEl.querySelector('.wb__ink');
+    const ctm = svg?.getScreenCTM();
+    if (!ctm) return null;
+    const point = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+    return { x: point.x / INK_SPACE, y: point.y / INK_SPACE };
 }
 
 /** Drag a chip around the court, in fractions of the court box. */
@@ -407,13 +492,15 @@ function makeDraggable(store, node, commit) {
         if (board.tool !== 'move') return;
         event.preventDefault();
         event.stopPropagation();
-        const court = node.parentElement.getBoundingClientRect();
+        const courtEl = node.parentElement;
         node.setPointerCapture(event.pointerId);
         node.classList.add('wb__pc--drag');
 
         const move = (moveEvent) => {
-            const x = clamp01((moveEvent.clientX - court.left) / court.width);
-            const y = clamp01((moveEvent.clientY - court.top) / court.height);
+            const point = courtPoint(courtEl, moveEvent.clientX, moveEvent.clientY);
+            if (!point) return;
+            const x = clamp01(point.x);
+            const y = clamp01(point.y);
             node.style.left = `${x * 100}%`;
             node.style.top = `${y * 100}%`;
             commit(x, y);
@@ -443,7 +530,7 @@ function inkLayer(store) {
 
     for (const stroke of board.strokes) svg.append(strokeNode(store, stroke));
 
-    if (board.tool !== 'move') svg.addEventListener('pointerdown', (event) => beginStroke(store, svg, event));
+    if (isDrawing()) svg.addEventListener('pointerdown', (event) => beginStroke(store, svg, event));
     return svg;
 }
 
@@ -455,46 +542,116 @@ function arrowHeads() {
     ).join('');
 }
 
+/**
+ * One committed mark: a group holding the ink and, under it, a much fatter
+ * transparent copy of the same geometry.
+ *
+ * The ink is 7px wide, which is nothing to hit with a thumb. Rather than fatten
+ * what the coach sees, the hit copy is what receives the pointer, so tapping
+ * *near* a line counts as tapping it. The group is what carries the translation,
+ * so ink and hit area can never drift apart.
+ */
 function strokeNode(store, stroke) {
     const ns = 'http://www.w3.org/2000/svg';
-    const node = document.createElementNS(ns, stroke.kind === 'circle' ? 'ellipse' : 'path');
+    const group = document.createElementNS(ns, 'g');
+    group.setAttribute('class', 'wb__strokeg');
+    applyOffset(group, stroke);
 
-    if (stroke.kind === 'circle') {
-        node.setAttribute('cx', stroke.cx);
-        node.setAttribute('cy', stroke.cy);
-        node.setAttribute('rx', stroke.rx);
-        node.setAttribute('ry', stroke.ry);
-        node.setAttribute('fill', `${stroke.colour}22`);
-    } else {
-        node.setAttribute('d', stroke.d);
+    const geometry = () => {
+        const node = document.createElementNS(ns, stroke.kind === 'circle' ? 'ellipse' : 'path');
+        if (stroke.kind === 'circle') {
+            node.setAttribute('cx', stroke.cx);
+            node.setAttribute('cy', stroke.cy);
+            node.setAttribute('rx', stroke.rx);
+            node.setAttribute('ry', stroke.ry);
+        } else {
+            node.setAttribute('d', stroke.d);
+        }
         node.setAttribute('fill', 'none');
-        if (stroke.kind === 'arrow') node.setAttribute('marker-end', `url(#wbah${INKS.indexOf(stroke.colour)})`);
-    }
-    node.setAttribute('stroke', stroke.colour);
-    node.setAttribute('stroke-width', '7');
-    node.setAttribute('stroke-linecap', 'round');
-    node.setAttribute('vector-effect', 'non-scaling-stroke');
-    node.setAttribute('class', 'wb__stroke');
+        node.setAttribute('stroke-linecap', 'round');
+        node.setAttribute('vector-effect', 'non-scaling-stroke');
+        return node;
+    };
+
+    const hit = geometry();
+    hit.setAttribute('class', 'wb__hit');
+
+    const ink = geometry();
+    ink.setAttribute('class', 'wb__stroke');
+    ink.setAttribute('stroke', stroke.colour);
+    ink.setAttribute('stroke-width', '7');
+    if (stroke.kind === 'circle') ink.setAttribute('fill', `${stroke.colour}22`);
+    if (stroke.kind === 'arrow') ink.setAttribute('marker-end', `url(#wbah${INKS.indexOf(stroke.colour)})`);
+
+    group.append(hit, ink);
 
     // Erase is a mode, not a rubbing gesture: tap the thing you want gone. On a
     // phone a rubber that follows the finger deletes whatever it brushes past.
     if (board.tool === 'erase') {
-        node.addEventListener('pointerdown', (event) => {
+        hit.addEventListener('pointerdown', (event) => {
             event.stopPropagation();
             board.strokes = board.strokes.filter((s) => s !== stroke);
             rerender(store);
         });
+    } else if (board.tool === 'move') {
+        makeStrokeDraggable(group, hit, stroke);
     }
-    return node;
+    return group;
+}
+
+/** Where a mark has been dragged to, as an SVG transform. */
+function applyOffset(group, stroke) {
+    if (stroke.tx || stroke.ty) group.setAttribute('transform', `translate(${stroke.tx} ${stroke.ty})`);
+    else group.removeAttribute('transform');
+}
+
+/**
+ * Drag a committed mark.
+ *
+ * The points are left exactly as drawn and an offset is carried alongside them,
+ * so a scribble of two hundred points moves by changing two numbers, and moving
+ * something never quietly degrades what was drawn.
+ */
+function makeStrokeDraggable(group, hit, stroke) {
+    hit.addEventListener('pointerdown', (event) => {
+        const court = group.ownerSVGElement?.parentElement;
+        const from = court && courtPoint(court, event.clientX, event.clientY);
+        if (!from) return;
+        event.preventDefault();
+        event.stopPropagation();
+
+        const originX = stroke.tx ?? 0;
+        const originY = stroke.ty ?? 0;
+        hit.setPointerCapture(event.pointerId);
+        group.classList.add('wb__strokeg--drag');
+
+        const move = (moveEvent) => {
+            const to = courtPoint(court, moveEvent.clientX, moveEvent.clientY);
+            if (!to) return;
+            stroke.tx = originX + (to.x - from.x) * INK_SPACE;
+            stroke.ty = originY + (to.y - from.y) * INK_SPACE;
+            applyOffset(group, stroke);
+        };
+        const up = () => {
+            group.classList.remove('wb__strokeg--drag');
+            hit.removeEventListener('pointermove', move);
+            hit.removeEventListener('pointerup', up);
+            hit.removeEventListener('pointercancel', up);
+        };
+        hit.addEventListener('pointermove', move);
+        hit.addEventListener('pointerup', up);
+        hit.addEventListener('pointercancel', up);
+    });
 }
 
 function beginStroke(store, svg, event) {
     event.preventDefault();
-    const box = svg.getBoundingClientRect();
-    const at = (e) => ({
-        x: ((e.clientX - box.left) / box.width) * INK_SPACE,
-        y: ((e.clientY - box.top) / box.height) * INK_SPACE,
-    });
+    // Same mapping the chips use, and for the same reason — see `courtPoint`.
+    const court = svg.parentElement;
+    const at = (e) => {
+        const point = courtPoint(court, e.clientX, e.clientY);
+        return point ? { x: point.x * INK_SPACE, y: point.y * INK_SPACE } : { x: 0, y: 0 };
+    };
 
     const start = at(event);
     const points = [start];
@@ -615,13 +772,14 @@ function tools(store) {
                     rerender(store);
                 },
             }),
+            // Never disabled: erase takes off players and marks as well as ink,
+            // and there are always six players on the board.
             el('button.wb__fix', {
                 type: 'button',
                 class: board.tool === 'erase' ? 'on' : '',
-                title: 'Tap a mark to remove it',
-                'aria-label': 'Erase a mark',
+                title: 'Tap a line, mark or player to take it off',
+                'aria-label': 'Erase',
                 text: '⌫',
-                disabled: board.strokes.length === 0,
                 onClick: () => {
                     board.tool = board.tool === 'erase' ? 'move' : 'erase';
                     rerender(store);

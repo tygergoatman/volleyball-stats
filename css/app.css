@@ -2448,6 +2448,40 @@ body.wb-open {
     overflow: hidden;
 }
 
+/* The board, turned on screen instead of by turning the phone.
+
+   rotate(90deg) about the top-left maps (x, y) to (-y, x), so the frame is
+   first pushed to the viewport's top-right corner and the rotation sweeps it
+   back down across the screen. Width and height swap, which is why they are
+   `100dvh` / `100dvw` the wrong way round — that is the whole point.
+
+   Everything inside is laid out landscape as normal and knows nothing about
+   this. The one thing that does care is pointer input: a rotated element's
+   bounding rect is still axis-aligned, so `courtPoint` goes through the SVG's
+   `getScreenCTM()` instead. */
+.wb__frame {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.wb--turned .wb__frame {
+    position: absolute;
+    top: 0;
+    left: 100%;
+    width: 100dvh;
+    height: 100dvw;
+    transform-origin: 0 0;
+    transform: rotate(90deg);
+}
+
+.wb__turnbtn.on {
+    background: var(--us);
+    color: #fff;
+}
+
 .wb__bar {
     flex: none;
     height: 40px;
@@ -2851,11 +2885,20 @@ body.wb-open {
     color: var(--muted);
 }
 
-/* Inert while chips are being moved, so a drag never draws a line. */
+/* Inert while chips are being moved, so a drag never draws a line.
+
+   `width`/`height` are explicit and must stay that way. An `<svg>` carries an
+   intrinsic aspect ratio from its viewBox, so `inset: 0` alone does NOT stretch
+   it — it stayed square over a tall court, and every stroke landed squashed up
+   the screen from where the finger actually was. The layer has to cover the
+   court exactly, because `courtPoint` reads the mapping off this element. */
 .wb__ink {
     position: absolute;
     inset: 0;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
+    touch-action: none;
 }
 
 .wb__court--drawing .wb__ink {
@@ -2866,17 +2909,35 @@ body.wb-open {
     pointer-events: none;
 }
 
+/* The ink itself is never a target: the hit copy under it is, and it is fat
+   enough to find with a thumb. `pointer-events` is not blocked by the inert
+   layer above — a child opts back in on its own, which is what lets a line be
+   tapped while the rest of the board stays reachable. */
 .wb__stroke {
-    pointer-events: stroke;
+    pointer-events: none;
 }
 
-.wb__turn {
+.wb__hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 26;
+    pointer-events: stroke;
+    touch-action: none;
+}
+
+.wb__strokeg--drag .wb__stroke {
+    opacity: 0.72;
+}
+
+.wb__turnhint {
     display: none;
 }
 
-/* Portrait still works; it is just cramped, so say why rather than looking broken. */
+/* Only while the board is both portrait-shaped and not turned — once it is
+   turned it is landscape whatever the phone is doing, so the hint would be
+   telling the coach to fix something already fixed. */
 @media (orientation: portrait) {
-    .wb__turn {
+    .wb:not(.wb--turned) .wb__turnhint {
         display: block;
         flex: none;
         margin: 0;
@@ -2889,11 +2950,8 @@ body.wb-open {
         border-top: 1px solid var(--border);
     }
 
-    .wb__rail {
-        width: 62px;
-    }
-
-    .wb__rail--right {
+    .wb:not(.wb--turned) .wb__rail,
+    .wb:not(.wb--turned) .wb__rail--right {
         width: 62px;
     }
 }
