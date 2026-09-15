@@ -36,6 +36,8 @@ import {
 } from '../formations.js';
 import { liberoSheet } from '../libero.js';
 import { planPrompts } from '../plan.js';
+import { attachSubRing, closeSubRing } from './subring.js';
+import { openRowSheet } from './subs.js';
 import { el, mount, openSheet, closeSheet, toast, buzz, confirmDialog } from './dom.js';
 
 /**
@@ -703,6 +705,25 @@ function courtMap(store, live, set) {
         playerLookup: lookup,
     });
     const { roleOf, mismatches } = assignRoles(live.lineup, live.rotation, lookup, system);
+    // The sheet is what knows each line's history, which is where the ring's
+    // "back on" offer comes from. Built once here rather than per bubble.
+    const sheet = set ? liberoSheet(set, { liberoIds: store.liberoIds }) : { rows: [] };
+
+    // The chip badges read the same prompts as the plan strip, so the two can
+    // never name different players. Not filtered by the strip's dismissals: the
+    // badge is a state indicator rather than a nag, and dismissing "not now"
+    // should not erase the fact that a sub is written down for this rotation.
+    const onCourt = new Set(live.lineup.filter(Boolean));
+    const prompts = set
+        ? planPrompts({
+              plan: store.planFor(),
+              lineup: live.lineup,
+              rotation: live.rotation,
+              available: store.roster.filter((p) => !onCourt.has(p.id)).map((p) => p.id),
+              liberoReplaced: sheet.awaitingLiberoReturn?.[0] ?? null,
+              rows: sheet.rows,
+          })
+        : [];
     const current =
         formation === 'afterReceive'
             ? {
@@ -724,7 +745,7 @@ function courtMap(store, live, set) {
             // Drawn in a stable order — by rotational position, never by where
             // they currently stand — so each bubble is the same DOM node across
             // views and CSS can carry it from one formation to the next.
-            live.lineup.map((_, index) => bubble(store, live, index + 1, points, roleOf)),
+            live.lineup.map((_, index) => bubble(store, live, index + 1, points, roleOf, { set, sheet, prompts })),
         ),
         el(
             'div.segmented.segmented--sm',
@@ -767,7 +788,7 @@ function courtMap(store, live, set) {
     ]);
 }
 
-function bubble(store, live, rotationalPosition, points, roleOf) {
+function bubble(store, live, rotationalPosition, points, roleOf, context = {}) {
     const playerId = live.lineup[rotationalPosition - 1];
     const player = playerId ? store.player(playerId) : null;
     // Everything legal stays rotational: which position a player occupies, and
@@ -794,7 +815,14 @@ function bubble(store, live, rotationalPosition, points, roleOf) {
     if (isServer) classes.push('bubble--server');
     if (!player) classes.push('bubble--empty');
 
-    return el(
+    // Where the plan says this player comes off — the badge that tells you to
+    // put your thumb here. The prompt list is the same one the plan strip reads,
+    // so the two can never disagree about who is due.
+    const due = player
+        ? (context.prompts ?? []).find((prompt) => prompt.kind === 'sub' && prompt.outId === player.id)
+        : null;
+
+    const node = el(
         'button',
         {
             type: 'button',
@@ -827,8 +855,34 @@ function bubble(store, live, rotationalPosition, points, roleOf) {
                 !roleOf?.[player.id] &&
                 HIGHLIGHTED_POSITIONS.includes(primaryPosition(player, row)) &&
                 el('span.bubble__tag', { text: primaryPosition(player, row) }),
+
+            due &&
+                el('span.bubble__sub', {
+                    text: `▲ ${store.player(due.inId)?.number ?? '?'} in`,
+                    title: 'Planned sub due — press and hold',
+                }),
         ],
     );
+
+    if (player && context.set) {
+        attachSubRing(node, {
+            store,
+            live,
+            set: context.set,
+            rows: context.sheet?.rows ?? [],
+            playerId: player.id,
+            // The escape hatch lands on this player's own row of the sub sheet —
+            // libero buttons, the whole bench — rather than the Subs tab at
+            // large, which would still need the right row found by hand.
+            onSubs: (id) => {
+                const sheet = context.sheet;
+                const row = sheet?.rows.find((r) => r.currentPlayerId === id);
+                if (row) openRowSheet(store, sheet, row);
+            },
+        });
+    }
+
+    return node;
 }
 
 /* ------------------------------------------------------------------ bench */
@@ -1178,4 +1232,8 @@ function toneClass(option) {
  * that substitutions live on their own tab, but the tab bar calls this on every
  * switch and a future interaction will want it.
  */
-export function resetCourtInteraction() {}
+export function resetCourtInteraction() {
+    // A ring left open over a tab that no longer exists would be a modal with
+    // nothing behind it.
+    closeSubRing();
+}

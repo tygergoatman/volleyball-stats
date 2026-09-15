@@ -2,15 +2,19 @@
  * The subs tab: a libero tracking sheet laid out like the paper one.
  *
  * Six serving-order rows, each showing who started there and everyone who has
- * been on since, plus the set's substitution counter. This is where every
- * replacement is made — the court map is read-only for subs, because they only
- * ever happen at a stoppage and doing them here keeps one record rather than
- * two ways of writing it.
+ * been on since, plus the set's substitution counter.
+ *
+ * This is still where the full picture lives, but it is no longer the only way
+ * in: pressing and holding a player on the court map offers the obvious swaps
+ * without leaving the rally, and its escape hatch opens `openRowSheet` for that
+ * player directly. Both write the same `sub` event, so there is one record
+ * however it was made.
  */
 
 import { SERVING_ORDER, SUB_LIMIT, liberoSheet } from '../libero.js';
 import { POSITION_LABELS, isLibero, playerLabel } from '../model.js';
 import { plannedSubCost } from '../plan.js';
+import { liberoAllowedAt } from '../subring.js';
 import { el, mount, openSheet, closeSheet, toast, buzz } from './dom.js';
 
 /**
@@ -461,7 +465,14 @@ function ltsRow(store, sheet, row) {
 
 /* ---------------------------------------------------------- row action sheet */
 
-function openRowSheet(store, sheet, row) {
+/**
+ * The substitutions available for one line of the sheet.
+ *
+ * Exported because the court map's press-and-hold lands here: its ⋯ bubble is
+ * the escape hatch for everything the ring does not offer, and dropping the
+ * coach on the Subs tab to find the right row by hand would not be an escape.
+ */
+export function openRowSheet(store, sheet, row) {
     const current = store.player(row.currentPlayerId);
     const returning = store.player(row.previousPlayerId);
     const liberos = store.liberoIds.map((id) => store.player(id)).filter(Boolean);
@@ -495,6 +506,16 @@ function openRowSheet(store, sheet, row) {
                 }),
             el('p.panel__hint', {
                 text: `A libero replacement is unlimited and does not count against the ${SUB_LIMIT}.`,
+            }),
+        );
+    } else if (!liberoAllowedAt(row.courtPosition)) {
+        // **The libero may not play front row.** This sheet offered her for any
+        // row for a long time, which is not the app declining to referee — it is
+        // offering something that never happens, and recording it would corrupt
+        // the sub count as well as the sheet.
+        parts.push(
+            el('p.panel__hint', {
+                text: `This line is at position ${row.courtPosition}, in the front row — no libero here. Substitute instead, or wait for the rotation.`,
             }),
         );
     } else if (sheet.liberosOnCourt.length > 0) {

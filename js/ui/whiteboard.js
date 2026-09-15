@@ -42,10 +42,36 @@ const TOOLS = [
     { key: 'circle', label: 'Circle', icon: '◌' },
 ];
 
+/**
+ * The ball, drawn rather than stood in for by a dot.
+ *
+ * Three seams, each an arc from one rim point to the next, bulging inward far
+ * enough (radius 26 over a radius-15 ball) that the three close into the concave
+ * triangle a volleyball shows head on. The centre panel keeps the yellow the dot
+ * used to have, which is what makes it findable on a dark green court — the
+ * shape says volleyball, the colour says *there*.
+ */
+function ballIcon() {
+    const arc = 'A 26,26 0 0,1';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'wb__ball');
+    svg.setAttribute('viewBox', '0 0 32 32');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = `
+        <circle cx="16" cy="16" r="15" fill="#f6f8fb" stroke="#12161c" stroke-width="1.5" />
+        <path d="M16,1.2 ${arc} 3.2,23.3 ${arc} 28.8,23.3 ${arc} 16,1.2 Z" fill="#f2c14e" />
+        <g fill="none" stroke="#12161c" stroke-width="1.5" stroke-linecap="round">
+            ${[0, 120, 240]
+                .map((deg) => `<g transform="rotate(${deg} 16 16)"><path d="M16,1.2 ${arc} 3.2,23.3" /></g>`)
+                .join('')}
+        </g>`;
+    return svg;
+}
+
 /** Marks that are not players, tapped in from the bank. */
 const EXTRAS = [
     { kind: 'opp', label: '?', title: 'Opponent' },
-    { kind: 'ball', label: '●', title: 'Ball' },
+    { kind: 'ball', label: '●', title: 'Ball', icon: ballIcon },
     { kind: 'cone', label: '△', title: 'Target' },
 ];
 
@@ -376,13 +402,17 @@ function bank(store) {
             'div.wb__chiprow',
             {},
             EXTRAS.map((extra) =>
-                el('button.wb__chip', {
-                    type: 'button',
-                    class: `wb__chip--${extra.kind}`,
-                    text: extra.label,
-                    title: extra.title,
-                    onClick: () => addExtra(store, extra),
-                }),
+                el(
+                    'button.wb__chip',
+                    {
+                        type: 'button',
+                        class: `wb__chip--${extra.kind}`,
+                        title: extra.title,
+                        'aria-label': extra.title,
+                        onClick: () => addExtra(store, extra),
+                    },
+                    [extra.icon ? extra.icon() : el('span', { text: extra.label })],
+                ),
             ),
         ),
         el('p.wb__hint', { text: 'Tap to add, drag to place. Double-tap anything to take it off.' }),
@@ -402,6 +432,7 @@ function addExtra(store, spec) {
         id: `x${extraSeq}`,
         kind: spec.kind,
         label: spec.label,
+        icon: spec.icon ?? null,
         player: spec.player ?? null,
         // An opponent lands on *their* side of the net; everything else on ours,
         // just behind the attack line where there is usually room. Dropping a
@@ -493,7 +524,7 @@ function extraNode(store, extra) {
             style: `left:${extra.x * 100}%; top:${extra.y * 100}%`,
             'data-extra': extra.id,
         },
-        [el('span.wb__pcn', { text: extra.label })],
+        [extra.icon ? extra.icon() : el('span.wb__pcn', { text: extra.label })],
     );
     makeDraggable(store, node, (nx, ny) => {
         extra.x = nx;

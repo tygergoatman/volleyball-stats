@@ -549,6 +549,26 @@ button:disabled {
     padding: 1px 6px;
 }
 
+/* The planned sub due on this player, at the foot of the bubble. `.bubble`
+   clips its children, so this sits inside the circle rather than hanging off it
+   the way the whiteboard's badge does. */
+.bubble__sub {
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 92%;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--warn);
+    color: #23262d;
+    font-size: 9px;
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .bubble__num {
     font-size: 26px;
     font-weight: 800;
@@ -2681,8 +2701,9 @@ body.wb-open {
 }
 
 .wb__chip--ball {
-    background: #e8c547;
-    color: #23262d;
+    background: none;
+    border: none;
+    padding: 0;
 }
 
 .wb__chip--cone {
@@ -2886,11 +2907,21 @@ body.wb-open {
     border-style: dashed;
 }
 
+/* The ball draws its own circle, so the chip is only a box to put it in — no
+   background, border or shadow of its own to show through the white. */
 .wb__pc--ball {
     width: 34px;
     height: 34px;
-    background: #e8c547;
-    color: #23262d;
+    background: none;
+    border: none;
+    box-shadow: none;
+}
+
+.wb__ball {
+    display: block;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
 }
 
 .wb__pc--cone {
@@ -2971,4 +3002,102 @@ body.wb-open {
     .wb:not(.wb--turned) .wb__rail--right {
         width: 62px;
     }
+}
+
+/* ------------------------------------------------------------------ sub ring
+
+   Press and hold a player on the court map. Sits above the tab bar and the
+   board but below toasts, so the confirmation of a sub is still readable over
+   it. Positions are set in pixels from JS — the ring is anchored to a bubble
+   whose own position is a percentage of the court, and reading that back in
+   CSS is not possible. */
+
+.ring {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-scrim);
+}
+
+.ring__scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(6, 8, 11, 0.8);
+    backdrop-filter: blur(2px);
+}
+
+/* The held player, still visible through the scrim so the swap has a subject. */
+.ring__halo {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 2px dashed rgba(255, 255, 255, 0.75);
+    pointer-events: none;
+}
+
+.ring__b {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: grid;
+    place-items: center;
+    align-content: center;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    background: var(--surface-3);
+    color: #fff;
+    font-weight: 800;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
+    touch-action: none;
+    transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.ring__n {
+    font-size: 17px;
+    line-height: 1;
+}
+
+.ring__t {
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    opacity: 0.92;
+}
+
+.ring__b--plan {
+    background: var(--warn);
+    color: #23262d;
+    border-color: #fff;
+}
+
+.ring__b--back {
+    background: var(--us);
+}
+
+.ring__b--lib {
+    background: var(--set);
+}
+
+.ring__b--subs {
+    background: var(--surface-2);
+    color: var(--muted);
+    border-style: dashed;
+}
+
+/* The finger is on this one. */
+.ring__b--hot {
+    transform: translate(-50%, -50%) scale(1.08);
+    box-shadow:
+        0 0 0 4px color-mix(in srgb, var(--warn) 50%, transparent),
+        0 6px 14px rgba(0, 0, 0, 0.6);
+}
+
+.ring__hint {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    margin: 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    pointer-events: none;
 }

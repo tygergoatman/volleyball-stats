@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.09.16d** (`js/version.js`).
+Current version: **2026.09.17a** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 54 tests — see the warning below
+node --test "tests/*.test.js"                          # 65 tests — see the warning below
 ```
 
 **The unit tests were lost and are not coming back on their own.** The remote working copy was
@@ -31,7 +31,7 @@ the owner still had the zip. Two consequences:
 - Rebuilding is happening **as code is touched**, not as one sitting: `privacy.test.js` first because
   it guards a hard constraint, then `model`, `store` and `stats` covering what 2026.09.12a and
   2026.09.13a added, and `sw.test.js` because the SHELL guard it describes had itself been lost.
-  54 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
+  65 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
   covered". Anything older than that is unguarded until someone writes it. The modules are
   intact and well commented, but some of the lost tests encoded decisions made in conversation, and
   those reasons live in this file rather than in the code.
@@ -961,7 +961,62 @@ and knowing what to look at once it is on the phone.
 - **Name the version and say what it replaces**, since two zips a day happen and installing the older
   one silently undoes work.
 
-## The whiteboard (2026.09.16d)
+## Press and hold to substitute (2026.09.17a)
+
+Hold a player on the court map for 350ms and up to four bubbles fan out. Slide
+onto one and release to make the swap; release elsewhere to cancel; release
+without moving and the bubbles stay up to be tapped. Chips also carry a
+`▲ 20 in` badge when the plan names them at the live rotation, which is what
+tells you where to put your thumb.
+
+### The candidate rules, and the ones that were thrown out
+
+`js/subring.js` is pure and decides what is offered. Three things, each from
+something the set actually knows:
+
+- **PLAN** — the plan row due at this rotation, read from `planPrompts` rather
+  than the plan, so it can never disagree with the plan strip and it follows a
+  slot through earlier ad-hoc swaps.
+- **BACK** — `row.previousPlayerId`: whoever the current occupant replaced in
+  this line. Holding the *libero* is the same move read from the other end, so
+  no separate case is needed — it is the swap made every time she rotates front.
+  **The kind matters**: a replacement with a libero at either end is `'libero'`
+  and unlimited; anything else is `'sub'` and counts against the 18.
+- **LIB** — back row only, and only when no libero is already on.
+
+**Rejected, on the owner's call: ranking the bench by position.** A middle for a
+middle reads well and is wrong here — "we move our girls around a good bit and at
+the JV level they are not set on specific positions". It was inventing a signal
+that is not in the data. Also rejected as clutter: a plan row for a *different*
+rotation. Both are reachable through the ⋯ bubble, which opens `openRowSheet`
+for that player — not the Subs tab at large, because a tab still leaves you
+hunting the right row.
+
+### The libero may not play front row
+
+`planPrompts` always knew this. **`openRowSheet` did not** — it offered
+`Libero #7 in for #4` on any row, front or back, for as long as it has existed.
+That is not the app's "records what happened, does not referee" rule: a libero
+in the front row is not a judgement call somebody might want recorded, it never
+happens, and recording it corrupts the sub count as well as the sheet. Gated on
+`liberoAllowedAt(row.courtPosition)`, shared with the ring so the two cannot
+drift.
+
+### Gesture mechanics worth keeping
+
+- **The fan opens toward the middle of the court.** A fixed direction works until
+  you hold somebody on the right-hand column, where half the ring lands off
+  screen — measured, not guessed. Five slots 35° apart across the half-turn
+  facing away from the nearer sideline; at radius 84 a bubble needs about that
+  much arc to clear its neighbour. PLAN takes the middle of the fan, SUBS is
+  always the bottom-most slot.
+- **`swallowClick` is cleared by the next `pointerdown`, not by the click it is
+  waiting for.** A hold that ends in a swipe produces no click at all, so a flag
+  waiting for one stays set and eats the next genuine tap on a player. That
+  reproduced on the first run of `ring-check.mjs`.
+- 10px of slop cancels the hold, so scrolling the court never opens a ring.
+
+## The whiteboard (2026.09.16e)
 
 A landscape scratch surface for a timeout, reached from **☰ → Whiteboard** — both
 mid-match and with nothing running. Not a tab: the bar is five wide and every one
@@ -1014,6 +1069,14 @@ stale ink is worse than lost ink.
   fiddly gesture on a phone and easy to start by accident while scrolling it. Two
   deliberate actions beat one delicate one. An opponent chip lands on *their* side
   of the net; everything else on ours.
+- **The ball is drawn, not a coloured dot.** Three arcs from rim point to rim
+  point, bulging inward hard enough (radius 26 on a radius-15 ball) to close into
+  the concave triangle a volleyball shows head on; the centre panel keeps the
+  yellow the dot had, so the shape says volleyball and the colour says *there* on
+  a dark green court. The chip itself drops its background, border and shadow —
+  the drawing is the ball, and a chip ring around it looked like a badge. Picked
+  from a mock of five variants at the sizes it actually ships at (34px on court,
+  30px in the rail); seams alone were cleaner large and vaguer small.
 - **Erase is a mode, not a rubber.** Tap the line, mark or player you want gone. A
   rubber that follows a finger deletes whatever it brushes past. It is never
   disabled, because there are always six players on the board to take off.

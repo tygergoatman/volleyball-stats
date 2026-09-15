@@ -395,9 +395,9 @@ attempts — so it can be negative.
 
 ### Substitutions and the libero — the Subs tab
 
-Every replacement happens on the **Subs** tab, which is laid out like the paper libero tracking
-sheet a book keeper fills in. Subs only ever happen at a stoppage, so there is nothing to gain from
-also doing them mid-rally on the court map — and one place to record them means one record.
+The **Subs** tab is laid out like the paper libero tracking sheet a book keeper fills in, and it is
+where the full picture lives. It is not the only way in — see
+[press and hold](#press-and-hold-to-substitute) below — but everything writes the same record.
 
 Six rows, serving order I to VI. Each shows who started there, everyone who has been on since
 (departed players struck through, exactly like the paper), how many terms of service the row has
@@ -491,6 +491,31 @@ legal under your association's rules is your call, not the app's.
 **Rows can be edited.** Tap a plan row to change its rotation or either player; the ✕ still deletes
 it. Editing keeps the row itself, so a prompt you had waved away stays waved away.
 
+### Press and hold to substitute
+
+When the plan names somebody at the rotation you are in, their bubble on the court map wears an
+amber **▲ 20 in** badge. That is where to put your thumb.
+
+**Hold a player for about a third of a second.** The court dims and up to four bubbles fan out
+around them. Slide onto one and let go to make that swap. Let go anywhere else and nothing happens.
+Let go without moving and the bubbles stay up so you can just tap one instead.
+
+| Bubble | When it appears |
+| ------ | --------------- |
+| **PLAN** | The plan row due at this rotation. Sits in the middle of the fan — the straight swipe |
+| **BACK** | Whoever this player replaced, coming back in. Hold the libero and this is her going off |
+| **LIB** | The libero. **Back row only** — she may not play front row, so she is not offered there |
+| **⋯ SUBS** | Always, always the bottom bubble. Opens this player's own row on the sub sheet |
+
+There is no bench list in the ring on purpose. Ranking the bench would mean guessing who is most
+likely, and with a squad that moves around there is nothing honest to guess from — so everyone else
+is one flick away on ⋯, which lands you on that player's row with the whole bench on it.
+
+The fan opens toward the middle of the court, so on the right-hand column it comes out to the left.
+That is the only way it fits on a phone without half of it running off the sideline.
+
+A normal tap still opens the stat sheet, and scrolling the court never opens a ring.
+
 A plan belongs to a team and is reused all season, and opens on whichever team you last picked on the
 Roster tab. If you run more than one, there is a picker at the top of the panel while no match is
 open.
@@ -514,7 +539,7 @@ on.
 - **Sub plan** — an amber badge on the chip when a planned sub fires at the rotation you are looking at.
 - **Move** to drag players anywhere; **Arrow**, **Draw** and **Circle** to mark it up in six colours.
   Move drags the lines too — grab an arrow you drew a little short and slide it where you meant it.
-- **Bank** on the left: bench players, a generic opponent, a ball and a target. Tap to drop one on,
+- **Bank** on the left: bench players, a generic opponent, the ball and a target. Tap to drop one on,
   then drag it.
 - **Double-tap anything on the court to take it off** — a mark, or one of your six. A player you take
   off drops back into the bench rail, a tap from going on again, so you can show a rotation with
@@ -537,6 +562,7 @@ volleyball-stats/
 │   ├── model.js            stat definitions, rotation maths, set replay  (pure)
 │   ├── libero.js           libero tracking sheet and sub counting        (pure)
 │   ├── plan.js             planned subs, and which are due right now     (pure)
+│   ├── subring.js          what a press-and-hold offers, and what it does not (pure)
 │   ├── stats.js            aggregation and derived metrics               (pure)
 │   ├── store.js            state, persistence, actions
 │   ├── app.js              tab routing, match lifecycle, wake lock
@@ -544,6 +570,7 @@ volleyball-stats/
 │       ├── dom.js          element helper, bottom sheet, toast
 │       ├── court.js        capture view and stat sheet
 │       ├── subs.js         libero tracking sheet, subs, the plan
+│       ├── subring.js      the press-and-hold ring on the court map
 │       ├── statsview.js    stat tables and rotation breakdown
 │       ├── roster.js       roster, team settings, backup
 │       └── log.js          point-by-point log
