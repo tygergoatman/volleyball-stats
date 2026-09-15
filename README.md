@@ -500,8 +500,11 @@ dropped, so you can decide whether it should go.
 
 ## The whiteboard
 
-**☰ → Whiteboard.** A landscape scratch surface for a timeout. It opens on your actual six in the
-rotation you are actually in, with their numbers and position colours. Turn the phone sideways, or
+**☰ → Whiteboard.** A landscape scratch surface for a timeout. Mid-set it opens on your actual six in
+the rotation you are actually in, with their numbers and position colours. With no set running it
+borrows the six you started your last set with, in the rotation that set opened in — and if you have
+not played a match yet, the six lowest numbers on the roster, standing in number order. The badge in
+the top bar says which of the three you are looking at. Turn the phone sideways, or
 tap **⟲** in the top bar to turn the board instead — which works even with the phone's rotation lock
 on.
 

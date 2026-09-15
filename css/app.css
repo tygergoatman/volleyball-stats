@@ -2575,6 +2575,23 @@ body.wb-open {
     padding: 5px 8px;
 }
 
+/* Sits where LIVE would, out of game: where the six on the board came from. */
+.wb__src {
+    flex: none;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 5px 8px;
+    white-space: nowrap;
+}
+
+.wb__src--weak {
+    opacity: 0.72;
+}
+
 .wb__toggle {
     display: flex;
     align-items: center;

@@ -88,10 +88,38 @@ function wipe() {
 
 /* --------------------------------------------------------------- open/close */
 
-export function openWhiteboard(store) {
+/**
+ * Who is on the board, in which rotation, and where that came from.
+ *
+ * Three sources, in order of how much they mean:
+ *
+ * 1. **The live set.** Obvious, and the reason the board beats the one in the bag.
+ * 2. **The last lineup this team started a set with**, at the rotation it started
+ *    in — the same `lastLineupForTeam` the "use previous lineup" button uses. Out
+ *    of game this is the six a coach means by "my lineup".
+ * 3. **The roster's first six.** A last resort, and worth naming as one: the
+ *    roster is sorted by jersey number, so this is the six lowest numbers on the
+ *    team standing in number order. It is a court to draw on, not a lineup.
+ *
+ * The rotation comes back with the lineup in all three cases, because the two are
+ * a pair — see `chipsFor`.
+ */
+function boardSource(store) {
     const live = store.activeSet ? store.liveState : null;
-    board = freshBoard(live?.rotation ?? 1);
-    if (!live) board.live = false;
+    if (live) return { lineup: live.lineup, rotation: live.rotation, from: 'live' };
+
+    const last = store.lastLineupForTeam(store.activeTeam?.id ?? null);
+    if (last) return { lineup: last.lineup, rotation: last.rotation, from: 'last', match: last.match };
+
+    return { lineup: store.roster.slice(0, 6).map((player) => player.id), rotation: 1, from: 'roster' };
+}
+
+export function openWhiteboard(store) {
+    const source = boardSource(store);
+    // Opens on the rotation that lineup belongs to, so the first thing on screen
+    // is an arrangement that actually happened rather than rotation 1 by default.
+    board = freshBoard(source.rotation);
+    if (source.from !== 'live') board.live = false;
 
     host = el('div.wb', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Whiteboard' });
     document.body.append(host);
@@ -181,8 +209,8 @@ function topBar(store) {
             el('button', { type: 'button', text: '▶', 'aria-label': 'Next rotation', onClick: () => step(store, 1) }),
         ]),
 
-        liveRotation !== null &&
-            (board.rotation === liveRotation
+        liveRotation !== null
+            ? board.rotation === liveRotation
                 ? el('span.wb__live', { text: '● LIVE' })
                 : el('button.wb__live.wb__live--off', {
                       type: 'button',
@@ -193,7 +221,11 @@ function topBar(store) {
                           wipe();
                           rerender(store);
                       },
-                  })),
+                  })
+            : // Out of game the six are borrowed from somewhere, and which
+              // somewhere changes what the board is worth. Saying so is cheap and
+              // stops "these are not my players" being a guess.
+              sourceBadge(store),
 
         el('button.wb__toggle', {
             type: 'button',
@@ -204,6 +236,22 @@ function topBar(store) {
             },
         }, [el('span.wb__dot'), el('span', { text: 'Sub plan' })]),
     ]);
+}
+
+/** Where an out-of-game board borrowed its six from, said in the top bar. */
+function sourceBadge(store) {
+    const source = boardSource(store);
+    if (source.from === 'last') {
+        const match = source.match;
+        return el('span.wb__src', {
+            text: '↺ last lineup',
+            title: `The six you started with on ${match.date} vs ${match.opponent}, in the rotation that set opened in`,
+        });
+    }
+    return el('span.wb__src.wb__src--weak', {
+        text: '# by number',
+        title: 'No completed set to borrow a lineup from, so these are the six lowest numbers on the roster, in number order. Drag them where you want them.',
+    });
 }
 
 function step(store, by) {
@@ -217,29 +265,24 @@ function step(store, by) {
 /**
  * Who is on the board and where, before any manual dragging.
  *
- * The lineup is rotated to the chosen rotation rather than read live, which is
- * what lets the stepper walk through all six without a match being in progress.
+ * The lineup comes from `boardSource` and is rotated to the chosen rotation
+ * rather than read live, which is what lets the stepper walk through all six
+ * without a match being in progress.
  */
 function chipsFor(store) {
     const set = store.activeSet;
-    const live = set ? store.liveState : null;
     const lookup = (id) => store.player(id);
+    const source = boardSource(store);
 
-    // No match running: the roster's first six, so the board is usable at the
-    // kitchen table. Six is the court; anybody else is bench.
-    const atRotationOne = live ? null : store.roster.slice(0, 6).map((p) => p.id);
-
-    // **Both branches must rotate.** A lineup and a rotation are a pair
-    // everywhere in `formations.js` — the rotation says which serving-order slot
-    // each court position is holding, and the lineup says who is standing there.
-    // Handing the same six over in the same order under every rotation number
-    // draws rotation 1's picture with rotation 4's label, and in the Rotation
-    // view — which is the lineup, unaltered — it draws *nothing* new at all. The
-    // stepper looked broken out of game for exactly this reason. The roster's
-    // first six are read as the lineup in rotation 1 and rotated from there.
-    const lineup = live
-        ? rotateLineupBy(live.lineup, board.rotation - live.rotation)
-        : rotateLineupBy(atRotationOne, board.rotation - 1);
+    // **A lineup and a rotation are a pair** everywhere in `formations.js` — the
+    // rotation says which serving-order slot each court position is holding, and
+    // the lineup says who is standing there. So whatever the source, the lineup
+    // is rotated from the rotation it belongs to. Handing the same six over in
+    // the same order under every rotation number draws rotation 1's picture with
+    // rotation 4's label, and in the Rotation view — which is the lineup,
+    // unaltered — draws *nothing* new at all. That is exactly how the stepper
+    // came to look broken out of game.
+    const lineup = rotateLineupBy(source.lineup, board.rotation - source.rotation);
 
     const points = formationPoints({
         lineup,
