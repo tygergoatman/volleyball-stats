@@ -523,6 +523,22 @@ Scheduled subs count against your 18 per set and the panel says how many; libero
 unlimited and cost nothing. A row naming somebody no longer on the roster is greyed rather than
 dropped, so you can decide whether it should go.
 
+## The matches list
+
+**☰** opens every match in the season, newest first, with how it went in the badge on the right:
+
+| Badge | Meaning |
+| ----- | ------- |
+| **W 2–1** in green | Won, by that score on sets |
+| **L 0–2** in red | Lost |
+| **1–0** in blue | Still being played — the running score, not a result |
+| **1–1** in grey | Ended level, so neither a win nor a loss |
+| **No sets** | Created but nothing played yet |
+
+A match stopped early counts on sets won: a best-of-five you had to abandon at 2–1 reads as a win,
+because it is one. Only a *completed* set counts, so a set sitting at 24–20 that nobody has closed
+out does not move the badge.
+
 ## The whiteboard
 
 **☰ → Whiteboard.** A landscape scratch surface for a timeout. Mid-set it opens on your actual six in

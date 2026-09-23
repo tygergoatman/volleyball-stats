@@ -720,3 +720,48 @@ export function matchScore(match) {
     const winner = us >= format.winAt ? 'us' : them >= format.winAt ? 'them' : null;
     return { us, them, winner, decided: Boolean(winner), format, setsPlayed };
 }
+
+/**
+ * How a match stands, as one badge: `W 2–1`, `L 0–2`, or a running score.
+ *
+ * Three cases beyond the obvious two, and each is a real match in the season:
+ *
+ * - **Ended without reaching the format's winning number.** A best-of-five
+ *   stopped at 2-1 because of a gym curfew is still a win on sets, so it reads
+ *   as one. Only `decided` can say "won the match"; this says "won more sets",
+ *   which is what a coach scanning the list wants.
+ * - **In progress.** The running set score, uncoloured. Colouring a 1-0 green
+ *   would be claiming a result that has not happened.
+ * - **Nothing played yet.** No score to show at all, so the badge says so
+ *   rather than showing a confident `0–0`.
+ *
+ * @param {object} match
+ * @returns {{kind: 'win'|'loss'|'drawn'|'live'|'empty', label: string, title: string}}
+ */
+export function matchResult(match) {
+    const { us, them, winner, decided, setsPlayed } = matchScore(match);
+    const score = `${us}–${them}`;
+
+    if (decided) {
+        const won = winner === 'us';
+        return {
+            kind: won ? 'win' : 'loss',
+            label: `${won ? 'W' : 'L'} ${score}`,
+            title: `${won ? 'Won' : 'Lost'} ${score} on sets`,
+        };
+    }
+
+    if (setsPlayed === 0) return { kind: 'empty', label: 'No sets', title: 'No sets played' };
+
+    if (match?.complete) {
+        if (us === them) return { kind: 'drawn', label: score, title: `Ended level at ${score} on sets` };
+        const won = us > them;
+        return {
+            kind: won ? 'win' : 'loss',
+            label: `${won ? 'W' : 'L'} ${score}`,
+            title: `Ended early — ${won ? 'ahead' : 'behind'} ${score} on sets`,
+        };
+    }
+
+    return { kind: 'live', label: score, title: `In progress, ${score} on sets` };
+}

@@ -6,7 +6,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computeSetState, describeEvent, lineupAsEntered, pointFor, rotateLineupBy } from '../js/model.js';
+import {
+    computeSetState,
+    describeEvent,
+    lineupAsEntered,
+    matchResult,
+    pointFor,
+    rotateLineupBy,
+} from '../js/model.js';
 
 const SIX = ['a', 'b', 'c', 'd', 'e', 'f'];
 
@@ -158,4 +165,64 @@ test('a malformed rotation falls back rather than throwing', () => {
     for (const rotation of [0, 7, 'four', null, NaN]) {
         assert.equal(lineupAsEntered({ startingRotation: rotation }).rotation, 1);
     }
+});
+
+/* ------------------------------------------------------- the result badge */
+
+/** A completed set won by whichever side is named. */
+function wonSet(by, number = 1) {
+    const target = number >= 5 ? 15 : 25;
+    const events = [];
+    for (let i = 0; i < target; i++) events.push({ type: 'team', code: by === 'us' ? 'oppError' : 'oppPoint' });
+    return { id: `s${number}`, number, complete: true, events, startingLineup: SIX.slice(), startingRotation: 1, startingServer: 'us' };
+}
+
+function match(results, overrides = {}) {
+    return { format: 3, complete: false, sets: results.map((by, i) => wonSet(by, i + 1)), ...overrides };
+}
+
+test('a won match reads W and the set score', () => {
+    const result = matchResult(match(['us', 'them', 'us']));
+    assert.equal(result.kind, 'win');
+    assert.equal(result.label, 'W 2–1');
+});
+
+test('a lost match reads L', () => {
+    const result = matchResult(match(['them', 'them']));
+    assert.equal(result.kind, 'loss');
+    assert.equal(result.label, 'L 0–2');
+});
+
+test('a match in progress shows the running score and is not called', () => {
+    const result = matchResult(match(['us']));
+    assert.equal(result.kind, 'live');
+    assert.equal(result.label, '1–0');
+});
+
+test('a match with no sets played says so rather than showing 0–0', () => {
+    assert.equal(matchResult(match([])).kind, 'empty');
+    assert.equal(matchResult({ format: 3, sets: [] }).kind, 'empty');
+    assert.equal(matchResult(undefined).kind, 'empty');
+});
+
+test('a set still in progress does not count toward the badge', () => {
+    // The set is sitting at 25-0 but nobody has closed it, so the match is
+    // level — declaring it 1-0 would call a match that is still being played.
+    const live = { ...wonSet('us', 1), complete: false };
+    assert.equal(matchResult({ format: 3, sets: [live] }).kind, 'empty');
+});
+
+test('a match ended early is judged on sets won, not on the format', () => {
+    // Best of five stopped at 2-1: nobody reached three, but it is still a win
+    // on sets and a coach scanning the list wants to see that.
+    const result = matchResult(match(['us', 'them', 'us'], { format: 5, complete: true }));
+    assert.equal(result.kind, 'win');
+    assert.equal(result.label, 'W 2–1');
+    assert.match(result.title, /Ended early/);
+});
+
+test('a match ended level is neither a win nor a loss', () => {
+    const result = matchResult(match(['us', 'them'], { format: 5, complete: true }));
+    assert.equal(result.kind, 'drawn');
+    assert.equal(result.label, '1–1');
 });

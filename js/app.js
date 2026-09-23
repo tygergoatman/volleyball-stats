@@ -1,7 +1,7 @@
 /** Application shell: tab routing, match lifecycle actions, and bootstrap. */
 
 import { Store, todayIso } from './store.js';
-import { matchScore } from './model.js';
+import { matchResult, matchScore } from './model.js';
 import { renderCourt, resetCourtInteraction } from './ui/court.js';
 import { renderRoster } from './ui/roster.js';
 import { renderStats } from './ui/statsview.js';
@@ -131,8 +131,12 @@ const actions = {
                     openWhiteboard(store);
                 },
             }),
-            ...matches.map((match) =>
-                el(
+            ...matches.map((match) => {
+                // The set count was the same for every match on the list and
+                // told you nothing you wanted. How it went is the reason you
+                // are scanning it.
+                const result = matchResult(match);
+                return el(
                     'button.picker__row',
                     {
                         type: 'button',
@@ -150,11 +154,13 @@ const actions = {
                         el('span.picker__name', { text: `vs ${match.opponent}` }),
                         el('span.picker__pos', { text: match.date }),
                         el('span.picker__flag', {
-                            text: `${match.sets.length} set${match.sets.length === 1 ? '' : 's'}`,
+                            class: `picker__flag--${result.kind}`,
+                            text: result.label,
+                            title: result.title,
                         }),
                     ],
-                ),
-            ),
+                );
+            }),
             el('button.btn.btn--primary', {
                 type: 'button',
                 text: '+ New match',

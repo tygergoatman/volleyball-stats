@@ -1279,6 +1279,35 @@ button:disabled {
     padding: 3px 8px;
 }
 
+/* How the match went, at a glance down the list. Tabular numerals so the
+   scores line up in a column rather than jittering. */
+.picker__flag {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.picker__flag--win {
+    color: var(--good);
+    background: color-mix(in srgb, var(--good) 20%, var(--surface-3));
+}
+
+.picker__flag--loss {
+    color: var(--bad);
+    background: color-mix(in srgb, var(--bad) 20%, var(--surface-3));
+}
+
+/* In progress and ended level both stay uncoloured — neither is a result. */
+.picker__flag--live {
+    color: var(--us);
+    background: color-mix(in srgb, var(--us) 18%, var(--surface-3));
+}
+
+.picker__flag--empty {
+    font-weight: 600;
+    opacity: 0.7;
+}
+
 /* ------------------------------------------------------------------ teams */
 
 .teamlist {

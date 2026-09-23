@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.09.17a** (`js/version.js`).
+Current version: **2026.09.19a** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 65 tests — see the warning below
+node --test "tests/*.test.js"                          # 72 tests — see the warning below
 ```
 
 **The unit tests were lost and are not coming back on their own.** The remote working copy was
@@ -31,7 +31,7 @@ the owner still had the zip. Two consequences:
 - Rebuilding is happening **as code is touched**, not as one sitting: `privacy.test.js` first because
   it guards a hard constraint, then `model`, `store` and `stats` covering what 2026.09.12a and
   2026.09.13a added, and `sw.test.js` because the SHELL guard it describes had itself been lost.
-  65 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
+  72 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
   covered". Anything older than that is unguarded until someone writes it. The modules are
   intact and well commented, but some of the lost tests encoded decisions made in conversation, and
   those reasons live in this file rather than in the code.
@@ -960,6 +960,25 @@ and knowing what to look at once it is on the phone.
   is the scannable summary, so a handful of lines is right.
 - **Name the version and say what it replaces**, since two zips a day happen and installing the older
   one silently undoes work.
+
+## The result badge on the matches list (2026.09.19a)
+
+`matchResult()` in `model.js`, rendered as `.picker__flag`. It replaced a set
+*count* that read the same on almost every row and answered a question nobody
+asks. Three judgements in it worth keeping:
+
+- **A match ended early is judged on sets won, not on the format.** A best-of-
+  five abandoned at 2-1 never reaches `winAt`, so `matchScore().decided` is
+  false — but it is still a win on sets and that is what a coach scanning the
+  list wants. `decided` means "won the match by the format"; the badge means
+  "won more sets", and they are not the same question.
+- **In progress and ended-level stay uncoloured.** Green on a 1-0 would be
+  claiming a result that has not happened.
+- **No sets played says so** rather than showing a confident `0–0`.
+
+The colour is asserted by reading `getComputedStyle().color` and checking the
+channels, not by checking the class name — a class name is not a colour, and
+that assertion is the only one that would survive somebody redefining `--good`.
 
 ## Press and hold to substitute (2026.09.17a)
 
