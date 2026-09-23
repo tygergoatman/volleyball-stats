@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.09.19a** (`js/version.js`).
+Current version: **2026.09.23a** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 72 tests — see the warning below
+node --test "tests/*.test.js"                          # 75 tests — see the warning below
 ```
 
 **The unit tests were lost and are not coming back on their own.** The remote working copy was
@@ -31,7 +31,7 @@ the owner still had the zip. Two consequences:
 - Rebuilding is happening **as code is touched**, not as one sitting: `privacy.test.js` first because
   it guards a hard constraint, then `model`, `store` and `stats` covering what 2026.09.12a and
   2026.09.13a added, and `sw.test.js` because the SHELL guard it describes had itself been lost.
-  72 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
+  75 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
   covered". Anything older than that is unguarded until someone writes it. The modules are
   intact and well commented, but some of the lost tests encoded decisions made in conversation, and
   those reasons live in this file rather than in the code.
@@ -127,7 +127,37 @@ to 15**. Do not fold the two together.
 ## The stat taxonomy
 
 Six rows on the stat sheet: **Pass** (`3 2 1 .5 D 0`), Set, Attack, Block, Serve,
-**Fault**. 486px of a 727px screen, no scrolling.
+**Fault** (`Net Under Double Whose?`). 486px of a 727px screen, no scrolling.
+
+### `charge: 'team'` — tagged on a player, not held against her (2026.09.23a)
+
+`whoseBall` is a ball that drops between people because nobody called it. It
+concedes the rally, so it has to be recorded; it is nobody's individual mistake,
+so it must not land in anybody's error column.
+
+The owner resolved a design fork that had me stuck. I had argued it must be a
+**team event** like `outOfRotation` — no player, because there is no culprit —
+and offered three placements. The answer was better than any of them: *"I can
+select the player closest, but maybe the stat is scored as a team and not
+individually? though knowing who was near the ball will help us practice
+better."* A player tag is not only blame. It is **where on the floor it
+happened**, which is the coachable part, and the seam between two players is
+exactly what a season's worth of these would show.
+
+So the flag `charge: 'team'` on a `STAT_GROUPS` option means: record the player,
+concede the point, and keep it out of `errorsCommitted`. Three places implement
+it and a test asserts the rule generically, so a second team-charged stat added
+later inherits the behaviour instead of quietly counting against somebody:
+
+- `stats.js` counts it in `line.fault.whose` and **omits it from
+  `errorsCommitted`**. `pointBreakdown` needs no change — a player stat that
+  concedes already lands in `them.fromOurErrors`, which is where a team error
+  belongs.
+- The Faults table shows a `Whose?` column that is **not** marked `bad`.
+  Colouring it red beside the three that are would say it is one.
+- `toneClass` gives it a dashed outline instead of the solid red fill, and the
+  toast reads "near #3, charged to the team". A red button next to a player's
+  name reads as blame whatever the data does underneath.
 
 ### Passing was split in two for two days, and put back
 

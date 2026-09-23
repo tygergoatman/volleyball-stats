@@ -24,7 +24,24 @@
 
     --radius: 14px;
     --tap: 48px;
-    --safe-b: env(safe-area-inset-bottom, 0px);
+    /* Never flush against a gesture bar: Android often reports no inset at all
+       where iOS reports a real one, and in an installed app there is no browser
+       chrome underneath to save you. */
+    --safe-b: max(env(safe-area-inset-bottom, 0px), 6px);
+
+    /* Stacking order, in one place so nothing has to guess.
+
+       The bug this exists to prevent: court bubbles carry an inline z-index
+       derived from how deep they stand, so an overlapped bubble keeps its own
+       tappable edge — and those values reached 100, above a sheet scrim sitting
+       at 50. Back-row players painted straight *through* an open stat sheet and
+       stayed tappable, so a tap meant for a stat could reopen another player.
+       Bubble depth is now scoped by `isolation` on the court and competes only
+       with itself; these three are the app's own layers. */
+    --z-tabs: 10;
+    --z-board: 90;
+    --z-scrim: 100;
+    --z-toast: 200;
 }
 
 * {
@@ -41,7 +58,9 @@ body {
 
 body {
     display: grid;
-    grid-template-rows: auto 1fr auto;
+    /* header, scrolling view, dock, tab bar. The dock row is `auto`, so on
+       every tab that leaves it empty it collapses to nothing. */
+    grid-template-rows: auto 1fr auto auto;
     height: 100dvh;
     background: var(--bg);
     color: var(--text);
@@ -56,7 +75,11 @@ body {
     touch-action: manipulation;
 }
 
-body.sheet-open {
+/* `#view` is the scroller, not the body, so locking the body did nothing and
+   the court kept scrolling behind an open sheet. Lock the element that actually
+   scrolls. */
+body.sheet-open,
+body.sheet-open .view {
     overflow: hidden;
 }
 
@@ -123,14 +146,52 @@ button:disabled {
 .view {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    /* A grid item's automatic minimum size is its content, which would push the
+       body past the viewport and let the whole page scroll — taking the tab bar
+       with it. `overflow-y: auto` happens to zero it out already; saying it
+       outright means a later style change cannot quietly bring that back. */
+    min-height: 0;
+    /* Stop an over-drag here rather than letting it chain to the document. In
+       an installed app there is no browser chrome to absorb it, and the whole
+       view can be panned. */
+    overscroll-behavior: contain;
     padding: 10px 10px 16px;
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
+/* The always-reachable control strip, above the tab bar.
+   Same mechanism as `.tabs` and for the same reason: it is a grid row of the
+   body, NOT sticky and NOT fixed. Sticky was tried on the tab bar and, in the
+   installed app, lifted it out of its row and over the page content. A grid row
+   cannot do that. Do not "improve" this with positioning. */
+.dock {
+    z-index: var(--z-tabs);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Nothing docked on this tab: take up no room at all, borders included. */
+.dock:empty {
+    display: none;
+}
+
 .tabs {
     display: grid;
+    /* Deliberately NOT positioned. `position: sticky; bottom: 0` was added here
+       as "insurance that changes nothing today" and it was not free: installed
+       to the home screen it lifted the bar out of its own grid row and parked it
+       over the bottom of the page, so the last of the content could not be
+       reached. The grid already puts this at the bottom of the viewport; what
+       actually stopped the bar drifting was `overscroll-behavior` on the
+       scroller. Do not add sticky or fixed back.
+       z-index still applies — a grid item takes it without being positioned. */
+    z-index: var(--z-tabs);
     /* One equal column per tab, whatever the count — a hardcoded number wrapped
        the bar onto a second row the moment a fifth tab arrived. */
     grid-auto-flow: column;
@@ -225,6 +286,52 @@ button:disabled {
     background: color-mix(in srgb, var(--them) 12%, transparent);
 }
 
+/* Timeouts: a pip per allowance, filled while unused. Tapping calls one. */
+.touts {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    line-height: 1;
+}
+
+.touts__label {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+}
+
+.touts__pip {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text);
+}
+
+/* Spent: hollowed out rather than removed, so the allowance stays legible. */
+.touts__pip--used {
+    background: none;
+    box-shadow: inset 0 0 0 1.5px var(--muted);
+}
+
+.touts--spent .touts__label {
+    color: var(--warn);
+}
+
+.touts--over {
+    background: color-mix(in srgb, var(--bad) 22%, transparent);
+}
+
+.touts__over {
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--bad);
+}
+
 .scoreboard__mid {
     display: flex;
     flex-direction: column;
@@ -247,12 +354,32 @@ button:disabled {
     text-transform: uppercase;
 }
 
+/* A button now — tapping it opens the "match the floor" correction. The dotted
+   underline is the only hint that it does anything; the chip has to stay small. */
 .scoreboard__rot {
     background: var(--surface-3);
     border-radius: 999px;
     padding: 2px 9px;
     font-weight: 700;
+    font-size: 11px;
     color: var(--text);
+    border-bottom: 1px dotted var(--muted);
+}
+
+/* A hint that is a warning, not just prose. */
+.panel__hint--warn {
+    color: var(--warn);
+}
+
+/* A hint that reads back what the controls above just did. */
+.panel__hint--read {
+    color: var(--text);
+    font-weight: 700;
+}
+
+/* The court in the correction sheet is for reading, not tapping. */
+.court--preview .slot {
+    pointer-events: none;
 }
 
 .scoreboard__serve.is-us {
@@ -299,10 +426,25 @@ button:disabled {
     border-radius: var(--radius) var(--radius) 0 0;
 }
 
+/*
+ * Bubbles are placed by coordinate rather than laid out in a grid, so switching
+ * formation moves them instead of redrawing them — which is what turns the
+ * transition arrows on the paper sheets into something you watch.
+ */
 .court__grid {
+    position: relative;
+    aspect-ratio: 3 / 2.15;
+    /* Keep bubble depth to itself. Each bubble's z-index says how deep it
+       stands so an overlapped one still has an edge to tap — but those are
+       court coordinates, not app layers, and without this they competed with
+       the sheet scrim and won. */
+    isolation: isolate;
+}
+
+.court--setup .court__grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    aspect-ratio: auto;
 }
 
 .court__hint {
@@ -314,11 +456,10 @@ button:disabled {
 }
 
 .bubble {
-    position: relative;
+    position: absolute;
     aspect-ratio: 1;
-    width: 100%;
-    max-width: 120px;
-    justify-self: center;
+    width: 30%;
+    transform: translate(-50%, -50%);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -334,8 +475,17 @@ button:disabled {
     transition: transform 90ms ease;
 }
 
+/*
+ * Applied for one journey when the formation changes. Later in the sheet than
+ * `.bubble`, so it wins the transition without needing !important, and removed
+ * on transitionend so press feedback goes back to being snappy.
+ */
+.bubble--flip {
+    transition: transform 0.5s cubic-bezier(0.34, 0.03, 0.2, 1);
+}
+
 .bubble:active {
-    transform: scale(0.94);
+    transform: translate(-50%, -50%) scale(0.94);
 }
 
 .bubble--back {
@@ -359,23 +509,14 @@ button:disabled {
         0 3px 0 rgba(0, 0, 0, 0.35);
 }
 
-.bubble--subtarget {
-    border-color: var(--good);
-    animation: pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes pulse {
-    50% {
-        box-shadow: 0 0 0 6px color-mix(in srgb, var(--good) 28%, transparent);
-    }
-}
-
 @media (prefers-reduced-motion: reduce) {
-    .bubble--subtarget {
-        animation: none;
-    }
+    /*
+     * Drop the press scale but KEEP the centring translate. Bubbles are placed
+     * by coordinate and centred with a transform, so `transform: none` here
+     * shunted them half a bubble down and right the moment they were pressed.
+     */
     .bubble:active {
-        transform: none;
+        transform: translate(-50%, -50%);
     }
 }
 
@@ -406,6 +547,26 @@ button:disabled {
     background: rgba(0, 0, 0, 0.35);
     border-radius: 999px;
     padding: 1px 6px;
+}
+
+/* The planned sub due on this player, at the foot of the bubble. `.bubble`
+   clips its children, so this sits inside the circle rather than hanging off it
+   the way the whiteboard's badge does. */
+.bubble__sub {
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 92%;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--warn);
+    color: #23262d;
+    font-size: 9px;
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .bubble__num {
@@ -554,18 +715,27 @@ button:disabled {
 
 /* ---------------------------------------------------------------- actions */
 
+/* End Set, alone at the bottom of the scroll. The scoring buttons that used to
+   share this block are docked now — see `.dock`. */
 .actions {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    /* Keep the scoring buttons in thumb reach on tall phones. */
     margin-top: auto;
 }
 
+/* +1 Us | +1 Them | ↶ — undo is narrow so the two scoring buttons keep almost
+   the whole width; they are what gets tapped at speed. */
 .actions__row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr auto;
     gap: 8px;
+}
+
+.btn--undo {
+    padding: 0 12px;
+    font-size: 13px;
+    white-space: nowrap;
 }
 
 /* ----------------------------------------------------------------- buttons */
@@ -660,6 +830,15 @@ button:disabled {
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+}
+
+/* More than one button in a panel head — kept together on the right so the
+   title still owns the left edge. */
+.panel__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
 }
 
 .panel__title {
@@ -859,7 +1038,7 @@ button:disabled {
 .scrim {
     position: fixed;
     inset: 0;
-    z-index: 50;
+    z-index: var(--z-scrim);
     display: flex;
     align-items: flex-end;
     background: rgba(0, 0, 0, 0.55);
@@ -970,6 +1149,10 @@ button:disabled {
 .statgroup--block .statgroup__label {
     color: var(--block);
 }
+.statgroup--fault .statgroup__label {
+    color: var(--bad);
+}
+
 .statgroup--dig .statgroup__label {
     color: var(--dig);
 }
@@ -999,6 +1182,43 @@ button:disabled {
     font-size: 17px;
 }
 
+/* Every row's neutral buttons carry a wash of that row's own accent, so the
+   block you are aiming at is identifiable before you read a single label.
+   One variable per group rather than one rule per group: a new row only has to
+   name its accent.
+
+   Deliberately low-saturation, and the reason matters: `--attack` is the same
+   green as `--good` and `--serve` the same amber as `--warn`. At this strength
+   a neutral button reads as *which row* it belongs to, not as a scoring one —
+   the bright fills still mean "this ended the rally". Push these percentages up
+   and that distinction is the thing you lose first. */
+.statgroup--pass {
+    --accent: var(--pass);
+}
+.statgroup--set {
+    --accent: var(--set);
+}
+.statgroup--attack {
+    --accent: var(--attack);
+}
+.statgroup--block {
+    --accent: var(--block);
+}
+.statgroup--serve {
+    --accent: var(--serve);
+}
+.statgroup--dig {
+    --accent: var(--dig);
+}
+.statgroup--fault {
+    --accent: var(--bad);
+}
+
+.statgroup .statbtn:not(.statbtn--good):not(.statbtn--bad) {
+    background: color-mix(in srgb, var(--accent, var(--surface-3)) 20%, var(--surface-3));
+    border-color: color-mix(in srgb, var(--accent, var(--border)) 42%, var(--border));
+}
+
 .statbtn--good {
     background: color-mix(in srgb, var(--good) 82%, #000);
     border-color: var(--good);
@@ -1009,6 +1229,16 @@ button:disabled {
     background: color-mix(in srgb, var(--bad) 74%, #000);
     border-color: var(--bad);
     color: #fff;
+}
+
+/* Costs the point but is not this player's error, so it carries the red of the
+   outline without the red of the fill. Dashed because it is tagged on her
+   rather than charged to her. */
+.statbtn--team {
+    background: color-mix(in srgb, var(--bad) 18%, var(--surface-3));
+    border: 1px dashed color-mix(in srgb, var(--bad) 55%, var(--border));
+    color: color-mix(in srgb, var(--bad) 45%, #fff);
+    font-size: 15px;
 }
 
 /* ----------------------------------------------------------------- picker */
@@ -1057,6 +1287,35 @@ button:disabled {
     background: var(--surface-3);
     border-radius: 999px;
     padding: 3px 8px;
+}
+
+/* How the match went, at a glance down the list. Tabular numerals so the
+   scores line up in a column rather than jittering. */
+.picker__flag {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.picker__flag--win {
+    color: var(--good);
+    background: color-mix(in srgb, var(--good) 20%, var(--surface-3));
+}
+
+.picker__flag--loss {
+    color: var(--bad);
+    background: color-mix(in srgb, var(--bad) 20%, var(--surface-3));
+}
+
+/* In progress and ended level both stay uncoloured — neither is a result. */
+.picker__flag--live {
+    color: var(--us);
+    background: color-mix(in srgb, var(--us) 18%, var(--surface-3));
+}
+
+.picker__flag--empty {
+    font-weight: 600;
+    opacity: 0.7;
 }
 
 /* ------------------------------------------------------------------ teams */
@@ -1231,6 +1490,36 @@ button:disabled {
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--muted);
+}
+
+/* The heading is a button inside the cell, not the cell itself: the player
+   column is sticky, and that only works on the `th`. */
+.sorthead {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+    width: 100%;
+    /* Headings are small text; the padding is what makes them a tap target. */
+    padding: 4px 0;
+    font: inherit;
+    color: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    white-space: nowrap;
+}
+
+.stattable__player .sorthead {
+    justify-content: flex-start;
+}
+
+.sorthead--on {
+    color: var(--us);
+}
+
+.sorthead__arrow {
+    font-size: 8px;
+    line-height: 1;
 }
 
 /* Stays a table cell so row borders line up; the spans handle the layout. */
@@ -1522,7 +1811,7 @@ button:disabled {
     left: 50%;
     top: calc(env(safe-area-inset-top, 0px) + 56px);
     transform: translate(-50%, -12px);
-    z-index: 60;
+    z-index: var(--z-toast);
     max-width: calc(100vw - 32px);
     padding: 10px 16px;
     border-radius: 999px;
@@ -1633,21 +1922,40 @@ button:disabled {
     border-color: color-mix(in srgb, var(--set) 60%, transparent);
 }
 
+/* Header and rows share one grid so the columns line up. */
+.lts__head,
+.lts__main {
+    display: grid;
+    grid-template-columns: 42px 22px 38px 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+}
+
+.lts__head {
+    margin-top: 8px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+}
+
 .lts__main {
     width: 100%;
     min-height: var(--tap);
-    display: grid;
-    grid-template-columns: 34px 26px 30px 1fr;
-    align-items: center;
-    gap: 8px;
     padding: 8px 10px;
     text-align: left;
     color: var(--text);
 }
 
 .lts__order {
+    /* A fixed box so the triangled variant lines up with the plain ones. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
     font-weight: 800;
-    font-size: 15px;
+    font-size: 17px;
     color: var(--muted);
 }
 
@@ -1663,9 +1971,20 @@ button:disabled {
 }
 
 .lts__pos {
-    font-size: 11px;
-    font-weight: 700;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
     color: var(--muted);
+}
+
+.lts__posnum {
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.lts__poslabel {
+    font-size: 9px;
+    letter-spacing: 0.04em;
 }
 
 .lts__entries {
@@ -1676,7 +1995,7 @@ button:disabled {
 }
 
 .lts__mark {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
 }
 
@@ -1691,7 +2010,10 @@ button:disabled {
 
 .lts__mark--on {
     color: var(--text);
-    font-size: 15px;
+    /* The number you are hunting for at a stoppage. Everything else on the row
+       is context, so this is the one that gets the size. */
+    font-size: 22px;
+    font-weight: 800;
 }
 
 .lts__row--libero .lts__mark--on {
@@ -1704,15 +2026,1117 @@ button:disabled {
 
 .lts__who {
     grid-column: 4;
-    font-size: 11px;
+    font-size: 13px;
+    font-weight: 600;
     color: var(--muted);
 }
 
-/* The triangle off the paper sheet: the one rotation the libero may serve in. */
-.lts__order--liberoserve::after {
-    content: '▲';
-    display: block;
-    margin-top: -2px;
-    font-size: 9px;
+/*
+ * The triangle off the paper sheet, drawn *around* the serving-order numeral the
+ * way a book keeper draws it — the one rotation the libero may serve in.
+ *
+ * An SVG background rather than borders or clip-path, because what is wanted is
+ * an outline with nothing filled, and the numeral has to sit inside it. The
+ * colour is baked into the data URI since custom properties do not resolve
+ * inside one; keep it in step with --set.
+ */
+.lts__order--liberoserve {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 88'%3E%3Cpath d='M50 6 L95 82 L5 82 Z' fill='none' stroke='%23a855f7' stroke-width='6' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 40px 34px;
     color: var(--set);
+    /* The numeral sits in the wide base of the triangle, not its point. */
+    align-items: flex-end;
+    padding-bottom: 4px;
+    font-size: 12px;
+    line-height: 1;
+}
+
+/* Serving *and* the libero's rotation: keep the triangle, keep the amber. */
+.lts__order--serving.lts__order--liberoserve {
+    color: var(--serve);
+}
+
+/* ------------------------------------------------------- court formations */
+
+.segmented--sm .seg {
+    min-height: 34px;
+    font-size: 12px;
+}
+
+.court__hint {
+    margin: 6px 0 0;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+}
+
+.court__hint--warn {
+    color: var(--warn);
+}
+
+/*
+ * The role a player is filling in this rotation — S1, MB2 and so on. In normal
+ * flow rather than a corner: the bubble is a circle, and anything absolutely
+ * placed near an edge gets clipped by the border radius.
+ */
+.bubble__role {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    opacity: 0.8;
+}
+
+/* A formation switch is information, not decoration — but honour the setting. */
+@media (prefers-reduced-motion: reduce) {
+    .bubble {
+        transition: none;
+    }
+}
+
+.court__hint--note {
+    color: var(--set);
+}
+
+/*
+ * Serve-receive packs players into passing lanes rather than the six cells, so
+ * bubbles overlap. Shrink them a little and stack deeper players in front, which
+ * both matches the sheet and leaves more of each one tappable.
+ */
+.court__grid--receive .bubble {
+    width: 24%;
+}
+
+/* Position colour: a dot on bench chips, where a full fill would hurt legibility. */
+.chip__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: none;
+}
+
+/* --------------------------------------------------------- court colours */
+
+/* Position tag painted with the colour the court uses for that position. */
+.tag--pos {
+    color: #fff;
+    font-weight: 700;
+}
+
+.colourlist {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.colourlist__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.colourlist__row .tag--pos {
+    min-width: 44px;
+    text-align: center;
+}
+
+.colourlist__swatches {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.swatch {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+}
+
+.swatch--on {
+    border-color: var(--text);
+    box-shadow: 0 0 0 2px var(--bg);
+}
+
+/* The receive / after-pass stage toggle, nested under the formation bar. */
+.segmented--sub {
+    margin-top: 6px;
+    opacity: 0.95;
+}
+
+.segmented--sub .seg {
+    min-height: 30px;
+    font-size: 11px;
+}
+
+/* --------------------------------------------------------------- game plan */
+
+/* The prompt on the Court tab. Loud enough to notice mid-stoppage, quiet
+   enough that ignoring it is comfortable — a plan is a suggestion. */
+.planstrip {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.planstrip__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--set);
+    border-left-width: 4px;
+    border-radius: var(--radius);
+    padding: 8px 10px;
+}
+
+.planstrip__label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--set);
+    flex: none;
+}
+
+.planstrip__swap {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 700;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planstrip__skip {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 15px;
+}
+
+/* The editor on the Subs tab. */
+.planlist {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.planlist__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 7px 9px;
+}
+
+.planlist__row--stale {
+    opacity: 0.6;
+}
+
+.planlist__lead {
+    flex: none;
+    min-width: 46px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.planlist__swap {
+    font-size: 14px;
+    font-weight: 700;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planlist__note {
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planlist__remove {
+    flex: none;
+    margin-left: auto;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+}
+
+/* ------------------------------------------------- points earned vs given */
+
+.panel__meta {
+    font-size: 15px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+}
+
+.pointsplit {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pointsplit__row {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    grid-template-areas:
+        'team bar'
+        '.    legend';
+    align-items: center;
+    gap: 3px 8px;
+}
+
+.pointsplit__team {
+    grid-area: team;
+    font-size: 12px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Two segments sized by share, so the split reads before the numbers do. */
+.pointsplit__bar {
+    grid-area: bar;
+    display: flex;
+    height: 18px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface-3);
+}
+
+.pointsplit__seg {
+    min-width: 0;
+}
+
+.pointsplit__seg--us {
+    background: var(--us);
+}
+
+.pointsplit__seg--them {
+    background: var(--them);
+}
+
+/* Points that changed hands without being earned — the same grey whichever
+   side received them, so "given away" reads as one idea across both bars. */
+.pointsplit__seg--given {
+    background: var(--surface-3);
+    color: var(--muted);
+    box-shadow: inset 1px 0 0 var(--border);
+}
+
+.pointsplit__legend {
+    grid-area: legend;
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.countlist {
+    margin-top: 12px;
+}
+
+.countlist__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+
+.countlist__title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.countlist__total {
+    font-size: 17px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.countlist__total.is-bad {
+    color: var(--bad);
+}
+
+.countlist__total.is-good {
+    color: var(--good);
+}
+
+.countlist__rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.countlist__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.countlist__row:last-child {
+    border-bottom: 0;
+}
+
+.countlist__name {
+    color: var(--muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.countlist__count {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------- first serve */
+
+/* One thin row under the scoreboard: tapped at most once a set, so it stays
+   small, but it has to be reachable at the whistle without hunting. */
+.servestrip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 10px;
+}
+
+.servestrip__label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    flex: none;
+}
+
+.servestrip .segmented {
+    flex: 1;
+    min-width: 0;
+}
+
+.servestrip__rot {
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.segmented--tight .seg {
+    padding: 6px 8px;
+    font-size: 12px;
+}
+
+/* A plan row opens its editor; the ✕ still removes it. */
+.planlist__main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    min-height: 34px;
+    padding: 0;
+    text-align: left;
+    color: inherit;
+}
+
+.planstrip__was {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+
+/* ------------------------------------------------------------- whiteboard */
+
+/* A full-bleed landscape surface, not a sheet: it replaces the app rather than
+   sitting over part of it, because every other screen is portrait and this one
+   is not. Below the scrim so a toast still lands on top of it. */
+.wb {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-board);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Dragging a chip must never be read as a page pan or a text selection. */
+    touch-action: none;
+    user-select: none;
+}
+
+body.wb-open {
+    overflow: hidden;
+}
+
+/* The board, turned on screen instead of by turning the phone.
+
+   rotate(90deg) about the top-left maps (x, y) to (-y, x), so the frame is
+   first pushed to the viewport's top-right corner and the rotation sweeps it
+   back down across the screen. Width and height swap, which is why they are
+   `100dvh` / `100dvw` the wrong way round — that is the whole point.
+
+   Everything inside is laid out landscape as normal and knows nothing about
+   this. The one thing that does care is pointer input: a rotated element's
+   bounding rect is still axis-aligned, so `courtPoint` goes through the SVG's
+   `getScreenCTM()` instead. */
+.wb__frame {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.wb--turned .wb__frame {
+    position: absolute;
+    top: 0;
+    left: 100%;
+    width: 100dvh;
+    height: 100dvw;
+    transform-origin: 0 0;
+    transform: rotate(90deg);
+}
+
+.wb__turnbtn.on {
+    background: var(--us);
+    color: #fff;
+}
+
+.wb__bar {
+    flex: none;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+
+.wb__back {
+    width: 30px;
+    height: 30px;
+    flex: none;
+    border-radius: 8px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 15px;
+}
+
+.wb__title {
+    font-weight: 800;
+    flex: none;
+}
+
+.wb__spacer {
+    flex: 1;
+}
+
+.wb__seg {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    flex: none;
+    background: var(--surface-2);
+    border-radius: 8px;
+}
+
+.wb__seg button {
+    padding: 4px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.wb__seg button.on {
+    background: var(--us);
+    color: #fff;
+}
+
+.wb__rot {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    flex: none;
+    background: var(--surface-2);
+    border-radius: 8px;
+}
+
+.wb__rot button {
+    padding: 4px 7px;
+    font-size: 13px;
+    color: var(--text);
+}
+
+.wb__rotn {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 0 4px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Says whether the board is showing the rotation actually on court. Once it is
+   not, the same spot becomes the way back — the stepper is easy to wander off
+   on and hard to find your way home from. */
+.wb__live {
+    flex: none;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--good);
+}
+
+.wb__live--off {
+    color: var(--muted);
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 5px 8px;
+}
+
+/* Sits where LIVE would, out of game: where the six on the board came from. */
+.wb__src {
+    flex: none;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 5px 8px;
+    white-space: nowrap;
+}
+
+.wb__src--weak {
+    opacity: 0.72;
+}
+
+.wb__toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: none;
+    padding: 5px 9px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.wb__toggle.on {
+    color: var(--text);
+}
+
+.wb__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--border);
+}
+
+.wb__toggle.on .wb__dot {
+    background: var(--warn);
+}
+
+.wb__stage {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+
+.wb__rail {
+    flex: none;
+    width: 86px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 5px;
+    background: var(--surface);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+}
+
+.wb__rail--left {
+    border-right: 1px solid var(--border);
+}
+
+.wb__rail--right {
+    width: 78px;
+    border-left: 1px solid var(--border);
+}
+
+.wb__raillabel {
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-left: 2px;
+    margin-top: 2px;
+}
+
+.wb__chiprow {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.wb__chip {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 800;
+    color: #fff;
+    background: var(--us);
+    border: 2px solid rgba(255, 255, 255, 0.18);
+}
+
+.wb__chip--opp {
+    background: #4a5364;
+    color: #cfd6e2;
+}
+
+.wb__chip--ball {
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.wb__chip--cone {
+    background: none;
+    border-style: dashed;
+    border-color: var(--muted);
+    color: var(--muted);
+}
+
+.wb__hint {
+    margin: 2px 0 0;
+    font-size: 8px;
+    line-height: 1.3;
+    color: var(--muted);
+}
+
+.wb__tool {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 6px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.wb__tool.on {
+    background: var(--surface-3);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--us);
+}
+
+.wb__tool--danger {
+    color: var(--bad);
+}
+
+.wb__toolico {
+    font-size: 13px;
+}
+
+.wb__fixrow {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+}
+
+.wb__fix {
+    padding: 6px 0;
+    border-radius: 8px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.wb__fix.on {
+    background: var(--surface-3);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--us);
+}
+
+.wb__fix--danger {
+    color: var(--bad);
+}
+
+.wb__swatches {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.wb__sw {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+}
+
+.wb__sw.on {
+    border-color: #fff;
+}
+
+.wb__surface {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    place-items: center;
+    padding: 6px;
+}
+
+/* Their side is the top 22%, ours the rest — the split `chipsFor` maps court
+   points into. Change one and change the other. */
+.wb__court {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border: 1px solid #3c4a5a;
+    border-radius: 8px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #16232c 0%, #16232c 22%, #1d3a2e 22%, #16232c 100%);
+}
+
+.wb__their {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 22%;
+    background: rgba(255, 77, 141, 0.07);
+}
+
+.wb__theirlabel {
+    position: absolute;
+    top: 5px;
+    left: 8px;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: rgba(255, 77, 141, 0.75);
+}
+
+.wb__net {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 22%;
+    border-top: 3px dashed rgba(255, 255, 255, 0.55);
+}
+
+.wb__netlabel {
+    position: absolute;
+    top: calc(22% + 6px);
+    right: 8px;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.wb__attack {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 52%;
+    border-top: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.wb__pc {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    font-weight: 800;
+    color: #fff;
+    background: var(--us);
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    touch-action: none;
+}
+
+.wb__pcn {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.wb__pcp {
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    opacity: 0.85;
+}
+
+.wb__pcsub {
+    position: absolute;
+    bottom: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: var(--warn);
+    color: #23262d;
+    font-size: 8px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.wb__pc--drag {
+    box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--us) 55%, transparent),
+        0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.wb__pc--opp {
+    width: 44px;
+    height: 44px;
+    background: #4a5364;
+    color: #cfd6e2;
+    border-style: dashed;
+}
+
+/* The ball draws its own circle, so the chip is only a box to put it in — no
+   background, border or shadow of its own to show through the white. */
+.wb__pc--ball {
+    width: 34px;
+    height: 34px;
+    background: none;
+    border: none;
+    box-shadow: none;
+}
+
+.wb__ball {
+    display: block;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+.wb__pc--cone {
+    width: 34px;
+    height: 34px;
+    background: none;
+    border-style: dashed;
+    border-color: var(--muted);
+    color: var(--muted);
+}
+
+/* Inert while chips are being moved, so a drag never draws a line.
+
+   `width`/`height` are explicit and must stay that way. An `<svg>` carries an
+   intrinsic aspect ratio from its viewBox, so `inset: 0` alone does NOT stretch
+   it — it stayed square over a tall court, and every stroke landed squashed up
+   the screen from where the finger actually was. The layer has to cover the
+   court exactly, because `courtPoint` reads the mapping off this element. */
+.wb__ink {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    touch-action: none;
+}
+
+.wb__court--drawing .wb__ink {
+    pointer-events: auto;
+}
+
+.wb__court--drawing .wb__pc {
+    pointer-events: none;
+}
+
+/* The ink itself is never a target: the hit copy under it is, and it is fat
+   enough to find with a thumb. `pointer-events` is not blocked by the inert
+   layer above — a child opts back in on its own, which is what lets a line be
+   tapped while the rest of the board stays reachable. */
+.wb__stroke {
+    pointer-events: none;
+}
+
+.wb__hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 26;
+    pointer-events: stroke;
+    touch-action: none;
+}
+
+.wb__strokeg--drag .wb__stroke {
+    opacity: 0.72;
+}
+
+.wb__turnhint {
+    display: none;
+}
+
+/* Only while the board is both portrait-shaped and not turned — once it is
+   turned it is landscape whatever the phone is doing, so the hint would be
+   telling the coach to fix something already fixed. */
+@media (orientation: portrait) {
+    .wb:not(.wb--turned) .wb__turnhint {
+        display: block;
+        flex: none;
+        margin: 0;
+        padding: 4px;
+        text-align: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--warn);
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+    }
+
+    .wb:not(.wb--turned) .wb__rail,
+    .wb:not(.wb--turned) .wb__rail--right {
+        width: 62px;
+    }
+}
+
+/* ------------------------------------------------------------------ sub ring
+
+   Press and hold a player on the court map. Sits above the tab bar and the
+   board but below toasts, so the confirmation of a sub is still readable over
+   it. Positions are set in pixels from JS — the ring is anchored to a bubble
+   whose own position is a percentage of the court, and reading that back in
+   CSS is not possible. */
+
+.ring {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-scrim);
+}
+
+.ring__scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(6, 8, 11, 0.8);
+    backdrop-filter: blur(2px);
+}
+
+/* The held player, still visible through the scrim so the swap has a subject. */
+.ring__halo {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 2px dashed rgba(255, 255, 255, 0.75);
+    pointer-events: none;
+}
+
+.ring__b {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: grid;
+    place-items: center;
+    align-content: center;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    background: var(--surface-3);
+    color: #fff;
+    font-weight: 800;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
+    touch-action: none;
+    transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.ring__n {
+    font-size: 17px;
+    line-height: 1;
+}
+
+.ring__t {
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    opacity: 0.92;
+}
+
+.ring__b--plan {
+    background: var(--warn);
+    color: #23262d;
+    border-color: #fff;
+}
+
+.ring__b--back {
+    background: var(--us);
+}
+
+.ring__b--lib {
+    background: var(--set);
+}
+
+.ring__b--subs {
+    background: var(--surface-2);
+    color: var(--muted);
+    border-style: dashed;
+}
+
+/* The finger is on this one. */
+.ring__b--hot {
+    transform: translate(-50%, -50%) scale(1.08);
+    box-shadow:
+        0 0 0 4px color-mix(in srgb, var(--warn) 50%, transparent),
+        0 6px 14px rgba(0, 0, 0, 0.6);
+}
+
+.ring__hint {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    margin: 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    pointer-events: none;
 }

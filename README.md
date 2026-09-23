@@ -222,7 +222,21 @@ undo and mid-log deletion always leave the score, rotation and lineup exactly ri
 
 - **Pass** — `3 2 1 .5 D 0`. One line for every first contact, serve receive and in rally alike. `D`
   is a dig and stays out of the passing average; `0` is a shank.
-- **Fault** — `Net`, `Under`, `Double`. All concede the point, so the whole row is red.
+- **Fault** — `Net`, `Under`, `Double`, `Whose?`. All concede the point, so the whole row is red.
+
+**`Whose?` is the odd one, and it is deliberate.** It is for a ball that drops between people
+because nobody called it — the rally you do not want to score as the opponent earning it, and do not
+want to pin on one passer as a missed pass. Tap the player who was **nearest**, not the player at
+fault: there isn't one.
+
+It is drawn with a dashed outline rather than the solid red of the three real faults, and the
+confirmation reads "near #3, charged to the team", because tapping a red button next to somebody's
+name looks like blame even when the numbers say otherwise. Underneath:
+
+- The other team gets the point, and it counts in the team's **points from our errors**.
+- It appears in a `Whose?` column on the Faults table, so you can see where on the floor these
+  happen — the seam between two players is exactly what you would want to fix in practice.
+- It is **not** added to that player's `All Err`. She was standing near it, which is not a mistake.
 
 **Out of rotation** is a team fault rather than one player's, so it is not in the Fault row. It sits
 at the bottom of the Court tab beside End Set, and scores a point for the other team.
