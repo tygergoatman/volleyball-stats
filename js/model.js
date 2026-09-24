@@ -232,6 +232,11 @@ export function isLibero(player) {
 /**
  * `point` is which team is awarded a point by this outcome, or null when the
  * ball stays in play. The scoreboard is derived entirely from these values.
+ *
+ * `charge: 'team'` marks an outcome that is **tagged on a player but not held
+ * against her**. The player says where on the floor it happened, which is what
+ * makes it coachable; the error belongs to the team. Only `whoseBall` uses it
+ * today. Anything with this flag must stay out of `errorsCommitted`.
  */
 export const STAT_GROUPS = [
     {
@@ -302,6 +307,18 @@ export const STAT_GROUPS = [
             { code: 'faultNet', label: 'Net', point: 'them', name: 'Net touch' },
             { code: 'faultUnder', label: 'Under', point: 'them', name: 'Under the net' },
             { code: 'faultDouble', label: 'Double', point: 'them', name: 'Double contact' },
+            // A ball that drops between people because nobody called it. Tagged
+            // on the player who was nearest, but **charged to the team**: see
+            // `charge` below. It sits here rather than with the team events
+            // because it needs a player to be worth anything, and last in the
+            // row because it is the one that is not that player's mistake.
+            {
+                code: 'whoseBall',
+                label: 'Whose?',
+                point: 'them',
+                name: 'Whose ball — nobody called it',
+                charge: 'team',
+            },
         ],
     },
 ];

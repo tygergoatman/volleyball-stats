@@ -79,6 +79,9 @@ const COLUMNS = {
         { label: 'Net', read: (line) => line.fault.net, bad: true, primary: true },
         { label: 'Under', read: (line) => line.fault.under, bad: true },
         { label: 'Double', read: (line) => line.fault.double, bad: true },
+        // Not flagged `bad`: it is not held against her, and colouring it red
+        // alongside the three that are would say it is.
+        { label: 'Whose?', read: (line) => line.fault.whose },
         { label: 'All Err', read: (line, d) => d.errorsCommitted, sort: (line, d) => d.errorsCommitted, bad: true },
     ],
 };
@@ -476,7 +479,8 @@ function hasData(line) {
         line.block.errors > 0 ||
         line.fault.net > 0 ||
         line.fault.under > 0 ||
-        line.fault.double > 0
+        line.fault.double > 0 ||
+        line.fault.whose > 0
     );
 }
 

@@ -14,7 +14,10 @@ export function emptyLine() {
         serve: { att: 0, aces: 0, errors: 0, inPlay: 0 },
         block: { solo: 0, assist: 0, errors: 0 },
         dig: { digs: 0 },
-        fault: { net: 0, under: 0, double: 0 },
+        // `whose` is the odd one: a ball nobody called, tagged on whoever
+        // was nearest. It is counted here so practice can find the seam,
+        // and deliberately left out of `errorsCommitted` — see there.
+        fault: { net: 0, under: 0, double: 0, whose: 0 },
     };
 }
 
@@ -50,6 +53,9 @@ const APPLY = {
     },
     faultDouble: (line) => {
         line.fault.double += 1;
+    },
+    whoseBall: (line) => {
+        line.fault.whose += 1;
     },
     kill: (line) => {
         line.attack.att += 1;
@@ -277,6 +283,12 @@ export function derive(line) {
         // Points a player put directly on the board.
         pointsScored: line.attack.kills + line.serve.aces + line.block.solo,
         // Rallies a player ended in the opponent's favour.
+        //
+        // **`fault.whose` is deliberately absent.** A ball nobody called is a
+        // team error tagged on whoever happened to be nearest; adding it here
+        // would charge her for standing close to it, which is the opposite of
+        // why it is recorded. It still reaches the scoreboard and the team's
+        // "points from our errors" through `pointBreakdown`.
         errorsCommitted:
             line.attack.errors +
             line.serve.errors +
@@ -351,6 +363,8 @@ const CSV_COLUMNS = [
     ['Net Touch', (_p, line) => line.fault.net],
     ['Under Net', (_p, line) => line.fault.under],
     ['Double Contact', (_p, line) => line.fault.double],
+    // Headed "near" because it is not charged to this player — see emptyLine.
+    ['Whose Ball (near)', (_p, line) => line.fault.whose],
 ];
 
 function fmtNumber(value, digits) {

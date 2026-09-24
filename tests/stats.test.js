@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { aggregate, derive, emptyLine, pointBreakdown } from '../js/stats.js';
-import { pointFor } from '../js/model.js';
+import { STAT_GROUPS, pointFor } from '../js/model.js';
 
 const stat = (code, playerId = 'p1') => ({ type: 'stat', playerId, code });
 const team = (code) => ({ type: 'team', code });
@@ -70,7 +70,7 @@ test('an average is null rather than zero with no attempts', () => {
 
 test('faults are counted per kind', () => {
     const line = lineFor(['faultNet', 'faultNet', 'faultUnder', 'faultDouble']);
-    assert.deepEqual(line.fault, { net: 2, under: 1, double: 1 });
+    assert.deepEqual(line.fault, { net: 2, under: 1, double: 1, whose: 0 });
 });
 
 test('faults count toward errors committed', () => {
@@ -146,4 +146,38 @@ test('there is no dig error any more', () => {
     const line = lineFor(['digErr']);
     assert.equal(line.dig.errors, undefined, 'dig.errors should be gone entirely');
     assert.equal(line.dig.digs, 0, 'and an unknown code should record nothing');
+});
+
+/* ----------------------------------------------- a ball nobody called for */
+
+test('whose-ball is tagged on the player but kept out of her errors', () => {
+    // The whole point of the stat: she was nearest, so practice knows where the
+    // seam is — but standing close to a ball nobody called is not her mistake.
+    const line = lineFor(['whoseBall', 'whoseBall', 'faultNet']);
+
+    assert.equal(line.fault.whose, 2, 'it is counted against her name');
+    assert.equal(derive(line).errorsCommitted, 1, 'but only the net touch is her error');
+});
+
+test('whose-ball still costs the point, on the scoreboard and in the split', () => {
+    const events = [stat('whoseBall', 'a'), stat('kill', 'b')];
+    assert.equal(pointFor(events[0]), 'them', 'the other team gets the rally');
+
+    const breakdown = pointBreakdown(events);
+    assert.equal(breakdown.them.fromOurErrors, 1, 'and it lands under our errors, not their earning');
+    assert.equal(breakdown.them.earned, 0);
+    assert.equal(breakdown.us.earned, 1);
+});
+
+test('the team charge is declared on the stat itself, not hardcoded in the readers', () => {
+    // Anything carrying `charge: 'team'` has to stay out of errorsCommitted.
+    // Stated as a rule so a second one added later inherits the behaviour
+    // rather than quietly counting against a player.
+    const charged = STAT_GROUPS.flatMap((group) => group.options).filter((o) => o.charge === 'team');
+    assert.ok(charged.length > 0, 'at least one exists');
+    for (const option of charged) {
+        const line = lineFor([option.code]);
+        assert.equal(derive(line).errorsCommitted, 0, `${option.code} must not count as a player error`);
+        assert.equal(option.point, 'them', `${option.code} still concedes the rally`);
+    }
 });

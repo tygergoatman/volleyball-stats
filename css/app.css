@@ -1231,6 +1231,16 @@ button:disabled {
     color: #fff;
 }
 
+/* Costs the point but is not this player's error, so it carries the red of the
+   outline without the red of the fill. Dashed because it is tagged on her
+   rather than charged to her. */
+.statbtn--team {
+    background: color-mix(in srgb, var(--bad) 18%, var(--surface-3));
+    border: 1px dashed color-mix(in srgb, var(--bad) 55%, var(--border));
+    color: color-mix(in srgb, var(--bad) 45%, #fff);
+    font-size: 15px;
+}
+
 /* ----------------------------------------------------------------- picker */
 
 .picker {

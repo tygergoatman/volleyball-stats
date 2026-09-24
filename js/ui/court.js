@@ -1202,7 +1202,15 @@ function openStatSheet(store, player, live) {
                                 buzz(option.point ? [10, 30, 10] : 12);
                                 closeSheet();
                                 const scored = STAT_BY_CODE.get(option.code)?.point;
-                                toast(`${playerLabel(player)} — ${option.name}`, scored ?? 'ok');
+                                // Say out loud that a team-charged tap did not
+                                // pin it on her — the confirmation is the only
+                                // place that can be made unambiguous.
+                                toast(
+                                    option.charge === 'team'
+                                        ? `${option.name} — near ${playerLabel(player)}, charged to the team`
+                                        : `${playerLabel(player)} — ${option.name}`,
+                                    scored ?? 'ok',
+                                );
                             },
                         }),
                     ),
@@ -1220,8 +1228,16 @@ function openStatSheet(store, player, live) {
     });
 }
 
-/** Colour a stat button by its effect on the scoreboard. */
+/**
+ * Colour a stat button by its effect on the scoreboard.
+ *
+ * A team-charged outcome costs the point but is not this player's error, so it
+ * is not painted with the solid red the personal faults wear. Tapping a red
+ * button next to somebody's name reads as blame, and that is the one thing
+ * `whoseBall` exists to avoid.
+ */
 function toneClass(option) {
+    if (option.charge === 'team') return 'statbtn--team';
     if (option.point === 'us') return 'statbtn--good';
     if (option.point === 'them') return 'statbtn--bad';
     return 'statbtn--neutral';
