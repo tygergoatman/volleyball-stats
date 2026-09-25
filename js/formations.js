@@ -17,7 +17,7 @@
  * lineup. `assignRoles` maps them onto actual people.
  */
 
-import { FRONT_ROW, primaryPosition, rotateLineupBy } from './model.js';
+import { FRONT_ROW, isSetter, primaryPosition, rotateLineupBy } from './model.js';
 
 export const DEFAULT_SYSTEM = '6-2';
 
@@ -519,6 +519,7 @@ export const FORMATIONS = [
  */
 export function assignRoles(lineup = [], rotation = 1, playerLookup = () => undefined, system = DEFAULT_SYSTEM) {
     const roles = SERVING_ORDER_ROLES[system] ?? SERVING_ORDER_ROLES[DEFAULT_SYSTEM];
+    rotation = anchoredRotation(lineup, rotation, playerLookup, system);
     const byRole = {};
     const roleOf = {};
     const mismatches = [];
@@ -565,6 +566,53 @@ export function assignRoles(lineup = [], rotation = 1, playerLookup = () => unde
 }
 
 /**
+ * The rotation the **drawing** should use, which in a 5-1 is decided by where
+ * the setter is standing rather than by the rotation counter.
+ *
+ * The bug this exists to kill: a coach started a set in "rotation 4" with the
+ * setter at position 1. The counter says which serving-order slot is at position
+ * 1, so the app dutifully labelled her the opposite — correct arithmetic, wrong
+ * answer, and unarguable from the coach's side because *she is the setter, she
+ * is standing right there*.
+ *
+ * **In a 5-1 there is exactly one setter and she is a person, not a slot.** So
+ * the role wheel is pinned to her: whatever position she is in, that is where
+ * `S` goes, and the other five roles follow round in serving order. The rotation
+ * counter is left alone — it is about who serves, and that is a different
+ * question from who sets.
+ *
+ * Note the two numbering systems agree by construction when the lineup is
+ * entered as the app intends, so this changes nothing for a set that was set up
+ * cleanly. It only rescues one that was not.
+ *
+ * Idempotent: the answer depends on the setter's position, not on the rotation
+ * passed in, so anchoring an already-anchored rotation returns the same value.
+ *
+ * Falls back to the counter when there is no single setter on court — nobody
+ * tagged `S`, two of them, or she has been substituted out.
+ */
+export function anchoredRotation(lineup = [], rotation = 1, playerLookup = () => undefined, system = DEFAULT_SYSTEM) {
+    if (system !== '5-1') return rotation;
+
+    const setters = [];
+    for (let position = 1; position <= 6; position++) {
+        const id = lineup[position - 1];
+        if (id && isSetter(playerLookup(id))) setters.push(position);
+    }
+    if (setters.length !== 1) return rotation;
+
+    // Rotation r puts serving-order slot 0 — the setter — at position
+    // (2 - r) mod 6. Inverted: a setter at position p means rotation (2 - p).
+    const anchored = (((2 - setters[0]) % 6) + 6) % 6;
+    return anchored === 0 ? 6 : anchored;
+}
+
+/** Whether the 5-1 drawing is following the setter rather than the counter. */
+export function isAnchoredAway(lineup, rotation, playerLookup, system) {
+    return anchoredRotation(lineup, rotation, playerLookup, system) !== rotation;
+}
+
+/**
  * The lineup to draw for a formation: an array of six player ids indexed by
  * (position - 1), the same shape the court map already takes.
  *
@@ -585,7 +633,7 @@ export function formationLineup({
 }) {
     if (formation === 'rotation') return lineup.slice();
 
-    const table = BASE[system]?.[rotation];
+    const table = BASE[system]?.[anchoredRotation(lineup, rotation, playerLookup, system)];
     if (!table) return lineup.slice();
 
     const { byRole } = assignRoles(lineup, rotation, playerLookup, system);
@@ -643,7 +691,7 @@ export function formationPoints({
     const points = {};
 
     if (formation === 'receive') {
-        const table = receiveTable(system, rotation, receiveOption);
+        const table = receiveTable(system, anchoredRotation(lineup, rotation, playerLookup, system), receiveOption);
         if (table) {
             // Band coordinates get stretched over the playable height; court
             // coordinates are already there. See `RECEIVE_SPACE`.

@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.09.25b** (`js/version.js`).
+Current version: **2026.09.25c** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 99 tests — see the warning below
+node --test "tests/*.test.js"                          # 105 tests — see the warning below
 ```
 
 **The unit tests were lost and are not coming back on their own.** The remote working copy was
@@ -31,7 +31,7 @@ the owner still had the zip. Two consequences:
 - Rebuilding is happening **as code is touched**, not as one sitting: `privacy.test.js` first because
   it guards a hard constraint, then `model`, `store` and `stats` covering what 2026.09.12a and
   2026.09.13a added, and `sw.test.js` because the SHELL guard it describes had itself been lost.
-  99 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
+  105 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
   covered". Anything older than that is unguarded until someone writes it. The modules are
   intact and well commented, but some of the lost tests encoded decisions made in conversation, and
   those reasons live in this file rather than in the code.
@@ -1009,9 +1009,9 @@ order, with the second setter replaced by a true opposite. Consequences:
 - The 6-2's back-row setter is `S1` in rotations 1-3 and `S2` in 4-6, so the
   5-1's single setter is **back row in 1-3 and front row in 4-6** — the three
   the owner named, arrived at independently.
-- **Rotations 1-3 of the 5-1 receive are the owner's own sheet, renamed**
-  (`S1`→`S`, `S2`→`OPP`). The same drawing with two labels changed, not an
-  invention. A test asserts the rename rather than duplicating the numbers.
+- A 5-1 lineup can be typed into the 6-2's boxes and vice versa, so the switch
+  needs no re-entry. (The receive **drawings** are a separate matter and are not
+  shared — see below, where assuming they were cost an hour.)
 
 ### The receive came from the owner's sheet, and the guess was wrong
 
@@ -1070,6 +1070,45 @@ score, rotation or recorded event depends on it. So it is safe mid-set and safe
 to switch back, which a test asserts by counting events across a switch. It sits
 on the Subs tab because it is a stoppage decision among stoppage decisions, and
 because the Court tab has no pixels to spare.
+
+### The setter is the anchor, not the counter (2026.09.25c)
+
+Shipped broken and found in a night: *"We start in r4 with our setter in the 1
+position, but it is showing her as an opp."* Exactly right, and the diagnosis
+was in the sentence — `assignRoles` read each position's role off the rotation
+counter (`slotAtPosition`), so position 1 at rotation 4 is serving-order slot 3,
+which is `OPP`. Arithmetically correct, and the wrong answer.
+
+**The counter and the lineup encode the same fact twice, and a 5-1 can check
+one against the other.** With exactly one player on court tagged `S`, her
+position *is* the rotation: rotation `r` puts the setter at position
+`(2 - r) mod 6`, so a setter at position `p` means rotation `(2 - p) mod 6`
+(0 → 6). `anchoredRotation()` does that inversion, and `assignRoles`,
+`formationLineup` and `formationPoints` all start from it — **labels, Base spots
+and Serve Rcv pattern together**. Fixing only the labels would have put the
+right name on the wrong dot, which is worse than the bug.
+
+- **It falls back to the counter when there is no single setter on court** —
+  zero tagged, two tagged, or a 6-2. Guessing with two setters is how you'd
+  redraw the court mid-match for the wrong reason.
+- **It ignores the counter entirely when it does fire, so it is idempotent** —
+  asserted, because a fix that drifts by one each render is a nastier bug than
+  the one it replaces.
+- **The 6-2 is untouched**, asserted separately. There the front-row setter slot
+  genuinely is the opposite.
+
+**It depends on the roster tag.** The setter must carry `S` in her positions, or
+there is nothing to anchor to and the counter wins. That is a real dependency on
+data the owner maintains, which is why it is said out loud in two places rather
+than left to be discovered.
+
+**Two notes exist because this was invisible.** The court shows a
+`court__hint--note` when the anchored rotation and the counter disagree, naming
+both numbers and pointing at ⟳ — if the *counter* is the one that's right, the
+lineup or the rotation needs correcting, and silently redrawing would hide that.
+The Subs tab's Offence panel says which player the 5-1 is built around and warns
+when zero or two on-court players are tagged `S`. A derivation the user cannot
+see is one they cannot overrule.
 
 ## The season dashboard — `trends.html` (2026.09.24b)
 

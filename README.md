@@ -177,6 +177,20 @@ Bubbles overlap in the receive view, as they do on paper, and where your sheet t
 behind a team-mate the app spreads them a little so both numbers stay readable. The arrangement is
 yours; only the spacing is the app's.
 
+**In a 5-1 the court follows your setter, not the rotation counter.** Start a set anywhere you like —
+your setter in position 1 with the counter on R4, for instance — and she is still drawn and labelled
+as the setter, with the Base spots and the Serve Rcv pattern for the rotation she is actually in.
+
+This needs the setter tagged **S** on the Roster tab; she is who the app looks for. With nobody
+tagged S on court, or two players tagged S, there is nothing to anchor to and the rotation counter is
+used as before. The Subs tab's Offence panel tells you which player the 5-1 is built around, and says
+so when it can't tell.
+
+If the counter and your setter's position disagree, the court says so in a note naming both numbers.
+Usually the counter is the thing that's wrong and ⟳ on the scoreboard fixes it — but if the counter is
+right and she is standing somewhere unexpected, correct the lineup instead. The app tells you rather
+than picking for you.
+
 Roles — S1, OH2, MB1 — are worked out from the serving order and shown on each bubble. Nothing extra
 to type. A role belongs to the rotation slot rather than the person, so a substitute inherits the
 role of the spot they come into.
@@ -185,7 +199,8 @@ Liberos and defensive specialists are the exception: they exist to replace someb
 shown as **L** or **DS** rather than as the hitter whose spot they took, and they never trip the
 "this doesn't look like a 6-2" warning.
 
-**The front-row setter shows as OPP.** In a 6-2 only the back-row setter sets — the other plays
+**In a 6-2, the front-row setter shows as OPP** (in a 5-1 she shows as S — see above). Only the
+back-row setter sets in a 6-2 — the other plays
 opposite — so that slot is labelled for the job it is doing, and both a true opposite and a setter who
 has rotated front belong there without a warning. If an opposite ends up in the _back-row_ setter slot
 you will still get flagged, which is your cue to swap her out before she rotates round.

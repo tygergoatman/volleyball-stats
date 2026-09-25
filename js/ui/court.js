@@ -8,6 +8,7 @@ import {
     MATCH_FORMATS,
     colorForPlayer,
     darkenHex,
+    isSetter,
     playerLabel,
     POSITION_LABELS,
     primaryPosition,
@@ -31,6 +32,7 @@ import {
     SYSTEMS,
     RECEIVE_OPTIONS,
     afterReceiveFormation,
+    anchoredRotation,
     assignRoles,
     formationPoints,
     keepsFrontRowOnReceive,
@@ -719,6 +721,12 @@ function courtMap(store, live, set) {
         receiveOption: option,
     });
     const { roleOf, mismatches } = assignRoles(live.lineup, live.rotation, lookup, system);
+    // In a 5-1 the drawing follows the setter rather than the counter. When the
+    // two disagree the court says so: one of them is wrong, and only the coach
+    // knows which — but silently picking one is how the setter ended up
+    // labelled as the opposite in the first place.
+    const drawnAs = anchoredRotation(live.lineup, live.rotation, lookup, system);
+    const setterOnCourt = live.lineup.findIndex((id) => id && isSetter(lookup(id))) + 1;
     // The sheet is what knows each line's history, which is where the ring's
     // "back on" offer comes from. Built once here rather than per bubble.
     const sheet = set ? liberoSheet(set, { liberoIds: store.liberoIds }) : { rows: [] };
@@ -805,6 +813,11 @@ function courtMap(store, live, set) {
                         ? `Rotation ${live.rotation}: no switch — the outside stays right and the opposite stays outside, so they attack from where they received.`
                         : `Rotation ${live.rotation}: the front row does not switch after this receive. Tap After pass to see where they attack from.`,
             }),
+        drawnAs !== live.rotation &&
+            el('p.court__hint.court__hint--note', {
+                text: `Drawn as rotation ${drawnAs}: your setter is at position ${setterOnCourt}, which is where a ${system} puts her in rotation ${drawnAs}. The counter still says ${live.rotation} — if that is the one that is right, fix the lineup or the rotation with ⟳ on the scoreboard.`,
+            }),
+
         // A drawing the app is guessing at has to say so. In a timeout nobody
         // can tell a default apart from the team's own sheet, and a coach will
         // point at it either way.

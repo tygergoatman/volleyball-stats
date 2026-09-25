@@ -17,7 +17,9 @@ import {
     SERVING_ORDER_ROLES,
     SYSTEMS,
     assignRoles,
+    anchoredRotation,
     formationLineup,
+    formationPoints,
     lineupForRotation,
     receiveTable,
     receiveIsProvisional,
@@ -193,4 +195,83 @@ test('every receive coordinate is on the court', () => {
             }
         }
     }
+});
+
+/* -------------------------------------- the setter is a person, not a slot */
+
+const FIVE_ONE_ROSTER = {
+    s: { id: 's', number: '1', positions: ['S'] },
+    oh1: { id: 'oh1', number: '2', positions: ['OH'] },
+    mb1: { id: 'mb1', number: '3', positions: ['MB'] },
+    opp: { id: 'opp', number: '4', positions: ['OPP'] },
+    oh2: { id: 'oh2', number: '5', positions: ['OH'] },
+    mb2: { id: 'mb2', number: '6', positions: ['MB'] },
+};
+const look = (id) => FIVE_ONE_ROSTER[id];
+
+test('a 5-1 setter reads as the setter wherever she is standing', () => {
+    // The reported bug: a set started on "rotation 4" with the setter typed
+    // into position 1. The arithmetic was right and the answer was wrong — she
+    // came out labelled the opposite while standing there setting.
+    for (let position = 1; position <= 6; position++) {
+        const lineup = [null, null, null, null, null, null];
+        lineup[position - 1] = 's';
+        // Anything in the other five spots; only the setter's spot matters here.
+        const others = ['oh1', 'mb1', 'opp', 'oh2', 'mb2'];
+        for (let i = 0, k = 0; i < 6; i++) if (!lineup[i]) lineup[i] = others[k++];
+
+        for (const counter of [1, 2, 3, 4, 5, 6]) {
+            const { roleOf } = assignRoles(lineup, counter, look, '5-1');
+            assert.equal(roleOf.s, 'S', `setter at position ${position}, counter ${counter}`);
+        }
+    }
+});
+
+test('anchoring ignores the counter entirely, so it is idempotent', () => {
+    const lineup = ['s', 'oh1', 'mb1', 'opp', 'oh2', 'mb2'];
+    const once = anchoredRotation(lineup, 4, look, '5-1');
+    assert.equal(once, 1, 'a setter at position 1 is rotation 1, whatever the counter says');
+    assert.equal(anchoredRotation(lineup, once, look, '5-1'), once, 'anchoring twice changes nothing');
+});
+
+test('every setter position maps to the rotation that puts her there', () => {
+    // The inverse of `slotAtPosition`, which is the only arithmetic here worth
+    // getting wrong quietly.
+    for (let rotation = 1; rotation <= 6; rotation++) {
+        const lineup = lineupForRotation(['s', 'oh1', 'mb1', 'opp', 'oh2', 'mb2'], rotation);
+        assert.equal(anchoredRotation(lineup, 99, look, '5-1'), rotation, `rotation ${rotation}`);
+    }
+});
+
+test('the 6-2 is left alone — two setters, and the counter is right', () => {
+    const lineup = ['s', 'oh1', 'mb1', 'opp', 'oh2', 'mb2'];
+    for (const rotation of [1, 3, 5]) {
+        assert.equal(anchoredRotation(lineup, rotation, look, '6-2'), rotation);
+    }
+});
+
+test('no setter on court, or two, falls back to the counter rather than guessing', () => {
+    const none = ['oh1', 'mb1', 'opp', 'oh2', 'mb2', null];
+    assert.equal(anchoredRotation(none, 4, look, '5-1'), 4);
+
+    const two = { ...FIVE_ONE_ROSTER, oh1: { id: 'oh1', number: '2', positions: ['S'] } };
+    const lineup = ['s', 'oh1', 'mb1', 'opp', 'oh2', 'mb2'];
+    assert.equal(anchoredRotation(lineup, 4, (id) => two[id], '5-1'), 4);
+});
+
+test('the base and receive drawings follow the setter too, not just the labels', () => {
+    // Labels alone would be half a fix: the court would name her the setter and
+    // then draw her in the opposite's base spot.
+    const lineup = ['s', 'oh1', 'mb1', 'opp', 'oh2', 'mb2'];
+    const drawn = formationLineup({ lineup, rotation: 4, formation: 'base', system: '5-1', playerLookup: look });
+    assert.equal(drawn[0], 's', 'a back-row setter plays position 1');
+
+    const points = formationPoints({
+        lineup,
+        rotation: 4,
+        formation: 'receive',
+        system: '5-1',
+        playerLookup: look,
+    });
+    assert.deepEqual(points.s, receiveTable('5-1', 1, 'opt1').S, "and receives where rotation 1's sheet puts her");
 });

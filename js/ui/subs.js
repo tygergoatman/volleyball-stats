@@ -11,9 +11,9 @@
  * however it was made.
  */
 
-import { DEFAULT_SYSTEM, SYSTEMS } from '../formations.js';
+import { DEFAULT_SYSTEM, SYSTEMS, anchoredRotation } from '../formations.js';
 import { SERVING_ORDER, SUB_LIMIT, liberoSheet } from '../libero.js';
-import { POSITION_LABELS, isLibero, playerLabel } from '../model.js';
+import { POSITION_LABELS, isLibero, isSetter, playerLabel } from '../model.js';
 import { plannedSubCost } from '../plan.js';
 import { liberoAllowedAt } from '../subring.js';
 import { el, mount, openSheet, closeSheet, toast, buzz } from './dom.js';
@@ -107,10 +107,40 @@ function systemPanel(store, set) {
             ),
         ),
         el('p.panel__hint', { text: chosen.blurb }),
+        current === '5-1' && setterNote(store, set),
         el('p.panel__hint', {
             text: 'Applies to this set only, and changes the court drawing — the Base and Serve Rcv views and whether the setter reads as a setter in the front row. Nothing already recorded moves.',
         }),
     ]);
+}
+
+/**
+ * Who the 5-1 is pinned to, said out loud.
+ *
+ * The court draws a 5-1 around whoever is tagged `S` on the roster rather than
+ * around the rotation counter, so it matters which player that is — and when it
+ * is nobody, or two of them, the app quietly falls back to the counter. Both
+ * facts are invisible otherwise, and the first version of this feature lost an
+ * evening to exactly that.
+ */
+function setterNote(store, set) {
+    const live = store.liveState;
+    const onCourt = (live?.lineup ?? []).map((id) => (id ? store.player(id) : null));
+    const setters = onCourt.filter((player) => player && isSetter(player));
+
+    if (setters.length === 1) {
+        const drawn = anchoredRotation(live.lineup, live.rotation, (id) => store.player(id), '5-1');
+        return el('p.panel__hint', {
+            text: `Built around ${playerLabel(setters[0])} — tagged S on the roster. The court follows her, so she reads as the setter in all six rotations${drawn === live.rotation ? '' : `, and is drawing rotation ${drawn} rather than the counter's ${live.rotation}`}.`,
+        });
+    }
+
+    return el('p.panel__hint.panel__hint--warn', {
+        text:
+            setters.length === 0
+                ? 'Nobody on court is tagged S on the roster, so the court falls back to the rotation counter. Tag your setter on the Roster tab and she will read as the setter everywhere.'
+                : `${setters.length} players on court are tagged S, so the court cannot tell which one runs the 5-1 and falls back to the rotation counter. Untag the one who is not setting.`,
+    });
 }
 
 function planPanel(store) {
