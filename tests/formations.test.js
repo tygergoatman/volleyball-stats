@@ -1,11 +1,10 @@
 /**
- * The base formation tables.
+ * The 5-1, and what it shares with the 6-2.
  *
- * These were transcribed by hand from the 6-2 rotation sheets, which is exactly
- * the kind of data that is easy to get subtly wrong and impossible to notice
- * courtside — a coach would just see one player standing in the wrong place and
- * assume they had misremembered. The structural tests below catch a fat-fingered
- * cell without anyone having to re-read the sheets.
+ * The base table is written out by hand so it can be read against a rotation
+ * sheet, which means a typo in it is invisible — it would just draw somebody in
+ * the wrong place, in a timeout, convincingly. So the rules are asserted here
+ * instead of trusted there.
  */
 
 import test from 'node:test';
@@ -13,309 +12,185 @@ import assert from 'node:assert/strict';
 
 import {
     BASE,
-    DEFAULT_SYSTEM,
-    SERVING_ORDER_ROLES,
+    RECEIVE_OPTIONS,
     SERVE_RECEIVE,
-    SPECIALIST_POSITIONS,
+    SERVING_ORDER_ROLES,
+    SYSTEMS,
     assignRoles,
     formationLineup,
-    formationPoints,
-    keepsFrontRowOnReceive,
     lineupForRotation,
+    receiveTable,
+    receiveIsProvisional,
+    roleExpectations,
+    slotAtPosition,
 } from '../js/formations.js';
+import { FRONT_ROW } from '../js/model.js';
 
-const ROLES = ['S1', 'S2', 'OH1', 'OH2', 'MB1', 'MB2'];
+const SIX = ['a', 'b', 'c', 'd', 'e', 'f'];
 
-// Serving order for a 6-2: S1, OH1, MB1, S2, OH2, MB2.
-const LINEUP = ['s1', 'oh1', 'mb1', 's2', 'oh2', 'mb2'];
-const PLAYERS = {
-    s1: { id: 's1', number: '1', position: 'S' },
-    oh1: { id: 'oh1', number: '2', position: 'OH' },
-    mb1: { id: 'mb1', number: '3', position: 'MB' },
-    s2: { id: 's2', number: '4', position: 'S' },
-    oh2: { id: 'oh2', number: '5', position: 'OH' },
-    mb2: { id: 'mb2', number: '6', position: 'MB' },
-};
-const lookup = (id) => PLAYERS[id];
+/** Which court position each role stands in, rotationally. */
+function positionsAt(rotation, system) {
+    const roles = SERVING_ORDER_ROLES[system];
+    const at = {};
+    for (let position = 1; position <= 6; position++) at[roles[slotAtPosition(position, rotation)]] = position;
+    return at;
+}
 
-test('every base rotation places all six roles exactly once', () => {
-    for (const [system, rotations] of Object.entries(BASE)) {
-        for (let rotation = 1; rotation <= 6; rotation++) {
-            const table = rotations[rotation];
-            assert.ok(table, `${system} rotation ${rotation} is missing`);
+test('the 5-1 is offered as a system', () => {
+    assert.ok(SYSTEMS.some((system) => system.key === '5-1'));
+});
 
-            const positions = Object.keys(table)
-                .map(Number)
-                .sort((a, b) => a - b);
-            assert.deepEqual(positions, [1, 2, 3, 4, 5, 6], `${system} r${rotation}: positions`);
+test('the two systems share a serving order shape', () => {
+    // This is what lets a lineup entered for one read correctly in the other,
+    // and why rotations 1-3 of the 5-1 receive are the 6-2 sheet renamed.
+    const sixTwo = SERVING_ORDER_ROLES['6-2'];
+    const fiveOne = SERVING_ORDER_ROLES['5-1'];
+    assert.equal(fiveOne.length, 6);
+    assert.deepEqual(fiveOne, sixTwo.map((role) => (role === 'S1' ? 'S' : role === 'S2' ? 'OPP' : role)));
+});
 
-            const placed = Object.values(table).sort();
-            assert.deepEqual(placed, ROLES.slice().sort(), `${system} r${rotation}: each role once`);
+test('the setter is back row in rotations 1-3 and front row in 4-6', () => {
+    for (let rotation = 1; rotation <= 6; rotation++) {
+        const front = FRONT_ROW.includes(positionsAt(rotation, '5-1').S);
+        assert.equal(front, rotation >= 4, `rotation ${rotation}`);
+    }
+});
+
+test('the 5-1 base table follows its six rules in every rotation', () => {
+    for (let rotation = 1; rotation <= 6; rotation++) {
+        const at = positionsAt(rotation, '5-1');
+        const front = (role) => FRONT_ROW.includes(at[role]);
+        const setterUp = front('S');
+
+        assert.deepEqual(
+            BASE['5-1'][rotation],
+            {
+                1: setterUp ? 'OPP' : 'S',
+                2: setterUp ? 'S' : 'OPP',
+                3: front('MB1') ? 'MB1' : 'MB2',
+                4: front('OH1') ? 'OH1' : 'OH2',
+                5: front('OH1') ? 'OH2' : 'OH1',
+                6: front('MB1') ? 'MB2' : 'MB1',
+            },
+            `rotation ${rotation}`,
+        );
+    }
+});
+
+test('every 5-1 table names all six roles exactly once', () => {
+    const roles = [...SERVING_ORDER_ROLES['5-1']].sort();
+    for (let rotation = 1; rotation <= 6; rotation++) {
+        assert.deepEqual(Object.values(BASE['5-1'][rotation]).sort(), roles, `base ${rotation}`);
+        for (const option of RECEIVE_OPTIONS['5-1']) {
+            assert.deepEqual(
+                Object.keys(receiveTable('5-1', rotation, option.key)).sort(),
+                roles,
+                `receive ${rotation} ${option.key}`,
+            );
         }
     }
 });
 
-test('base always has a setter at position 1 and the opposite at position 2', () => {
-    // The property the whole 6-2 turns on: whichever setter is back row runs the
-    // offence from right back, and the other plays opposite in the front right.
-    // It holds in all six rotations on the sheets, so a transcription slip that
-    // breaks it is a transcription slip.
+test('the 5-1 sheet offers two options in every rotation', () => {
+    assert.equal(RECEIVE_OPTIONS['5-1'].length, 2);
     for (let rotation = 1; rotation <= 6; rotation++) {
-        const table = BASE['6-2'][rotation];
-        assert.match(table[1], /^S[12]$/, `rotation ${rotation}: position 1 should be a setter`);
-        assert.match(table[2], /^S[12]$/, `rotation ${rotation}: position 2 should be the opposite`);
-        assert.notEqual(table[1], table[2], `rotation ${rotation}: the two setters are different people`);
+        const [a, b] = RECEIVE_OPTIONS['5-1'].map((o) => receiveTable('5-1', rotation, o.key));
+        assert.ok(a && b, `rotation ${rotation}`);
+        assert.notDeepEqual(a, b, `rotation ${rotation}: two options that are the same are not two options`);
     }
 });
 
-test('the setters swap duty halfway round, matching the sheets', () => {
-    // S1 serves in rotation 1, so S1 sets while they are back row (rotations
-    // 1-3) and plays opposite once they rotate front (4-6).
-    for (const rotation of [1, 2, 3]) assert.equal(BASE['6-2'][rotation][1], 'S1');
-    for (const rotation of [4, 5, 6]) assert.equal(BASE['6-2'][rotation][1], 'S2');
+test('an unknown or missing option falls back to the first rather than drawing nothing', () => {
+    assert.deepEqual(receiveTable('5-1', 1, 'nonsense'), receiveTable('5-1', 1, 'opt1'));
+    assert.deepEqual(receiveTable('5-1', 1), receiveTable('5-1', 1, 'opt1'));
 });
 
-test('a middle and an outside are always front row together', () => {
-    // Front row is positions 2, 3 and 4: the opposite, a middle and an outside.
+test('the 6-2 has no options and is returned flat', () => {
+    assert.equal(RECEIVE_OPTIONS['6-2'], undefined);
+    assert.deepEqual(receiveTable('6-2', 1), SERVE_RECEIVE['6-2'][1]);
+});
+
+test('every receive formation has three players deep and the setter never among them', () => {
+    // The shape of a serve receive: three passers back, the setter at the net
+    // whether she came from the front row or released from behind.
     for (let rotation = 1; rotation <= 6; rotation++) {
-        const front = [2, 3, 4].map((p) => BASE['6-2'][rotation][p]);
-        assert.equal(front.filter((r) => r.startsWith('MB')).length, 1, `rotation ${rotation}: one middle front`);
-        assert.equal(front.filter((r) => r.startsWith('OH')).length, 1, `rotation ${rotation}: one outside front`);
-        assert.equal(front.filter((r) => r.startsWith('S')).length, 1, `rotation ${rotation}: one setter front`);
+        for (const option of RECEIVE_OPTIONS['5-1']) {
+            const table = receiveTable('5-1', rotation, option.key);
+            const deep = Object.entries(table).filter(([, point]) => point.y > 0.6);
+            assert.equal(deep.length, 3, `rotation ${rotation} ${option.key} passers`);
+            assert.ok(table.S.y <= 0.4, `rotation ${rotation} ${option.key}: the setter is not a passer`);
+        }
     }
 });
 
-test('roles come from serving order without anything extra being typed', () => {
-    const { byRole, roleOf, mismatches } = assignRoles(LINEUP, 1, lookup);
-    assert.deepEqual(byRole, { S1: 's1', OH1: 'oh1', MB1: 'mb1', S2: 's2', OH2: 'oh2', MB2: 'mb2' });
-    assert.equal(roleOf.mb2, 'MB2');
-    assert.deepEqual(mismatches, [], 'a canonical lineup raises nothing');
-    assert.deepEqual(SERVING_ORDER_ROLES[DEFAULT_SYSTEM], ['S1', 'OH1', 'MB1', 'S2', 'OH2', 'MB2']);
+test('a 5-1 setter reads as a setter in the front row', () => {
+    // The 6-2 calls a front-row setter slot the opposite, which is correct for
+    // that system and wrong for this one. Getting it backwards would have the
+    // app misreading the system it was just told it is in.
+    assert.equal(roleExpectations('S', true, '5-1').label, 'S');
+    assert.deepEqual(roleExpectations('S', true, '5-1').allowed, ['S']);
+    assert.equal(roleExpectations('S1', true, '6-2').label, 'OPP');
 });
 
-test('a lineup entered in a different order is reported, not silently drawn', () => {
-    // Setter and middle swapped: slot III now holds someone tagged S.
-    const scrambled = ['s1', 'oh1', 's2', 'mb1', 'oh2', 'mb2'];
-    const { mismatches } = assignRoles(scrambled, 1, lookup);
-    assert.equal(mismatches.length, 2);
-    assert.deepEqual(mismatches.map((m) => `${m.role}:${m.actual}`).sort(), ['MB1:S', 'S2:MB']);
-});
-
-test('untagged players raise nothing, since they claim nothing', () => {
-    const bare = (id) => ({ id, number: '9' });
-    assert.deepEqual(assignRoles(LINEUP, 1, bare).mismatches, []);
-});
-
-test('the rotation view is the lineup exactly as it stands', () => {
-    const lineup = ['a', 'b', 'c', 'd', 'e', 'f'];
-    assert.deepEqual(
-        formationLineup({ lineup, startingLineup: LINEUP, rotation: 3, formation: 'rotation', playerLookup: lookup }),
-        lineup,
-    );
-});
-
-test('base redraws rotation 1: the outside and the opposite switch sides', () => {
-    // Rotation 1 rotational order puts S2 at position 4 and OH1 at position 2.
-    const lineup = lineupForRotation(LINEUP, 1);
-    assert.deepEqual(lineup, LINEUP);
-
-    const drawn = formationLineup({
-        lineup,
-        rotation: 1,
-        formation: 'base',
-        playerLookup: lookup,
-    });
-
-    // Position (index + 1): 1 S1, 2 S2, 3 MB1, 4 OH1, 5 OH2, 6 MB2.
-    assert.deepEqual(drawn, ['s1', 's2', 'mb1', 'oh1', 'oh2', 'mb2']);
-    assert.equal(drawn[3], 'oh1', 'the outside moved to position 4');
-    assert.equal(drawn[1], 's2', 'the opposite moved to position 2');
-});
-
-test('base holds the same six players as the rotation it redraws', () => {
+test('a 5-1 lineup of setter-first does not raise a mismatch', () => {
+    const player = (id, position) => ({ id, number: id, positions: [position] });
+    const roster = {
+        a: player('a', 'S'),
+        b: player('b', 'OH'),
+        c: player('c', 'MB'),
+        d: player('d', 'OPP'),
+        e: player('e', 'OH'),
+        f: player('f', 'MB'),
+    };
     for (let rotation = 1; rotation <= 6; rotation++) {
-        const lineup = lineupForRotation(LINEUP, rotation);
-        const drawn = formationLineup({
-            lineup,
-            rotation,
-            formation: 'base',
-            playerLookup: lookup,
-        });
-        assert.deepEqual(drawn.slice().sort(), lineup.slice().sort(), `rotation ${rotation}: same people`);
-        assert.equal(new Set(drawn).size, 6, `rotation ${rotation}: nobody drawn twice`);
+        // The lineup travels with the rotation: at rotation 3 the six have
+        // moved two spots, so handing the same array over for every rotation
+        // asks the app to check a lineup nobody is standing in.
+        const lineup = lineupForRotation(SIX, rotation);
+        const { mismatches } = assignRoles(lineup, rotation, (id) => roster[id], '5-1');
+        assert.deepEqual(mismatches, [], `rotation ${rotation}`);
     }
 });
 
-test('a substitute inherits the role of the slot they come into', () => {
-    // #7 comes on for the second middle. A role belongs to the rotation slot,
-    // not the person, so #7 is MB2 for as long as they are on — and base places
-    // them where MB2 plays, not where the person they replaced happened to be.
-    const lineup = ['s1', 'oh1', 'mb1', 's2', 'oh2', 'sub7'];
-    const withSub = (id) => PLAYERS[id] ?? { id, number: '7', position: 'MB' };
-
-    const { byRole, roleOf, mismatches } = assignRoles(lineup, 1, withSub);
-    assert.equal(byRole.MB2, 'sub7');
-    assert.equal(roleOf.sub7, 'MB2');
-    assert.deepEqual(mismatches, [], 'a middle replacing a middle is no mismatch');
-
-    const drawn = formationLineup({ lineup, rotation: 1, formation: 'base', playerLookup: withSub });
-    assert.deepEqual(drawn.slice().sort(), lineup.slice().sort(), 'the same six are on court');
-    assert.equal(drawn[5], 'sub7', 'drawn where MB2 plays');
+test('the rotation view is the lineup itself, in either system', () => {
+    for (const system of ['6-2', '5-1']) {
+        assert.deepEqual(formationLineup({ lineup: SIX, rotation: 3, formation: 'rotation', system }), SIX);
+    }
 });
 
-test('roles follow the rotation, so the same slot means different people later', () => {
-    // Rotation 3 puts MB1 in to serve. Position 1 therefore holds MB1, not S1.
-    const lineup = lineupForRotation(LINEUP, 3);
-    const { byRole } = assignRoles(lineup, 3, lookup);
-    assert.deepEqual(byRole, { S1: 's1', OH1: 'oh1', MB1: 'mb1', S2: 's2', OH2: 'oh2', MB2: 'mb2' });
-    assert.equal(lineup[0], 'mb1', 'the third of the order is serving');
-
-    // And base still releases the back-row setter to position 1.
-    const drawn = formationLineup({ lineup, rotation: 3, formation: 'base', playerLookup: lookup });
-    assert.equal(drawn[0], 's1', 'S1 is still back row in rotation 3, so still sets');
-});
-
-test('an unknown system or rotation falls back to the rotation view', () => {
-    const lineup = ['a', 'b', 'c', 'd', 'e', 'f'];
-    assert.deepEqual(
-        formationLineup({ lineup, startingLineup: LINEUP, rotation: 1, formation: 'base', system: '5-1' }),
-        lineup,
-        'a system with no table drawn yet must not blank the court',
-    );
-});
-
-/* ------------------------------------------------- serve-receive placement */
-
-test('every serve-receive rotation places all six roles', () => {
-    for (const [system, rotations] of Object.entries(SERVE_RECEIVE)) {
+test('nothing is marked provisional any more — both systems come from the sheets', () => {
+    for (const system of ['6-2', '5-1']) {
         for (let rotation = 1; rotation <= 6; rotation++) {
-            const table = rotations[rotation];
-            assert.ok(table, `${system} rotation ${rotation} is missing`);
-            assert.deepEqual(Object.keys(table).sort(), ROLES.slice().sort(), `${system} r${rotation}`);
-            for (const [role, point] of Object.entries(table)) {
-                assert.ok(point.x >= 0 && point.x <= 1, `${role} x on court`);
-                assert.ok(point.y >= 0 && point.y <= 1, `${role} y on court`);
+            assert.equal(receiveIsProvisional(rotation, system), false, `${system} r${rotation}`);
+        }
+    }
+});
+
+test("the 5-1 receive is its own sheet, not the 6-2's with the labels changed", () => {
+    // Worth an assertion because an earlier release *did* derive rotations 1-3
+    // that way, reasoning that the setter is back row in both so the picture
+    // must be the same. The real sheet disagrees in every one of the three —
+    // by more than a tenth of the court in places. The systems share a serving
+    // order; they do not share a passing formation.
+    const rename = (role) => (role === 'S1' ? 'S' : role === 'S2' ? 'OPP' : role);
+    for (const rotation of [1, 2, 3]) {
+        const renamed = Object.fromEntries(
+            Object.entries(SERVE_RECEIVE['6-2'][rotation]).map(([role, point]) => [rename(role), point]),
+        );
+        assert.notDeepEqual(receiveTable('5-1', rotation, 'opt1'), renamed, `rotation ${rotation}`);
+    }
+});
+
+test('every receive coordinate is on the court', () => {
+    for (const system of Object.keys(SERVE_RECEIVE)) {
+        const options = RECEIVE_OPTIONS[system] ?? [{ key: null }];
+        for (let rotation = 1; rotation <= 6; rotation++) {
+            for (const option of options) {
+                for (const [role, point] of Object.entries(receiveTable(system, rotation, option.key))) {
+                    assert.ok(point.x >= 0 && point.x <= 1, `${system} r${rotation} ${role} x`);
+                    assert.ok(point.y >= 0 && point.y <= 1, `${system} r${rotation} ${role} y`);
+                }
             }
         }
-    }
-});
-
-test('serve-receive keeps three passers deep and the setter up', () => {
-    // The shape that makes it a receive formation rather than a jumble: the
-    // three deepest players are the passing seam, and a setter is nearer the net
-    // than at least one of them.
-    for (let rotation = 1; rotation <= 6; rotation++) {
-        const table = SERVE_RECEIVE['6-2'][rotation];
-        const byDepth = Object.entries(table).sort((a, b) => b[1].y - a[1].y);
-        const deepest = byDepth.slice(0, 3).map(([role]) => role);
-        assert.equal(new Set(deepest).size, 3, `rotation ${rotation}: three distinct passers`);
-
-        const setters = ['S1', 'S2'].map((r) => table[r].y);
-        assert.ok(
-            Math.min(...setters) < Math.max(...Object.values(table).map((p) => p.y)),
-            `rotation ${rotation}: a setter is nearer the net than the deepest passer`,
-        );
-    }
-});
-
-test('points are produced for every player, in every view', () => {
-    const lineup = lineupForRotation(LINEUP, 2);
-    for (const formation of ['rotation', 'base', 'receive']) {
-        const points = formationPoints({ lineup, rotation: 2, formation, playerLookup: lookup });
-        assert.equal(Object.keys(points).length, 6, `${formation}: all six placed`);
-        for (const id of lineup) {
-            assert.ok(points[id], `${formation}: ${id} has a point`);
-            assert.ok(points[id].x >= 0 && points[id].x <= 1);
-            assert.ok(points[id].y >= 0 && points[id].y <= 1);
-        }
-    }
-});
-
-test('switching view moves players rather than replacing them', () => {
-    // What makes the transition animate: the same ids appear in both views, so
-    // the court can carry each bubble from one point to the other.
-    const lineup = lineupForRotation(LINEUP, 1);
-    const base = formationPoints({ lineup, rotation: 1, formation: 'base', playerLookup: lookup });
-    const receive = formationPoints({ lineup, rotation: 1, formation: 'receive', playerLookup: lookup });
-
-    assert.deepEqual(Object.keys(base).sort(), Object.keys(receive).sort());
-    const moved = Object.keys(base).filter((id) => base[id].x !== receive[id].x || base[id].y !== receive[id].y);
-    assert.ok(moved.length >= 4, 'most players move between the two');
-});
-
-test('rotations 1 and 4 are the ones that do not switch after receiving', () => {
-    assert.equal(keepsFrontRowOnReceive(1), true);
-    assert.equal(keepsFrontRowOnReceive(4), true);
-    for (const rotation of [2, 3, 5, 6]) {
-        assert.equal(keepsFrontRowOnReceive(rotation), false, `rotation ${rotation} switches`);
-    }
-
-    // And "not switching" is exactly the rotational arrangement, which is why no
-    // extra table is needed — the destination is a view the app already draws.
-    for (const rotation of [1, 4]) {
-        const lineup = lineupForRotation(LINEUP, rotation);
-        const rotational = formationPoints({ lineup, rotation, formation: 'rotation', playerLookup: lookup });
-        const base = formationPoints({ lineup, rotation, formation: 'base', playerLookup: lookup });
-        const frontRowDiffers = Object.keys(rotational).some(
-            (id) => rotational[id].x !== base[id].x || rotational[id].y !== base[id].y,
-        );
-        assert.ok(frontRowDiffers, `rotation ${rotation}: base and rotational differ, so the note matters`);
-    }
-});
-
-/* --------------------------------------------------- liberos and specialists */
-
-test('a libero is shown as L, not as the hitter she replaced', () => {
-    // The libero comes on for the back-row outside. She occupies that slot — so
-    // the formation tables still place her there — but she is a libero, and
-    // labelling her OH1 is simply wrong.
-    const lineup = ['s1', 'lib', 'mb1', 's2', 'oh2', 'mb2'];
-    const withLibero = (id) => (id === 'lib' ? { id: 'lib', number: '19', name: 'Hann', position: 'L' } : PLAYERS[id]);
-
-    const { byRole, roleOf, mismatches } = assignRoles(lineup, 1, withLibero);
-
-    assert.equal(roleOf.lib, 'L', 'the badge reads L');
-    assert.equal(byRole.OH1, 'lib', 'she still holds the slot, so base can place her');
-    assert.deepEqual(mismatches, [], 'a libero on court is not a broken lineup');
-});
-
-test('a libero raises no warning in any rotation or slot she can occupy', () => {
-    // She replaces back-row players, and which role that is changes every
-    // rotation. None of them should complain.
-    const libero = { id: 'lib', number: '19', position: 'L' };
-    const withLibero = (id) => (id === 'lib' ? libero : PLAYERS[id]);
-
-    for (let rotation = 1; rotation <= 6; rotation++) {
-        for (let slot = 0; slot < 6; slot++) {
-            const lineup = lineupForRotation(LINEUP, rotation).slice();
-            lineup[slot] = 'lib';
-            const { mismatches, roleOf } = assignRoles(lineup, rotation, withLibero);
-            assert.deepEqual(mismatches, [], `rotation ${rotation}, slot ${slot}: no warning`);
-            assert.equal(roleOf.lib, 'L', `rotation ${rotation}, slot ${slot}: labelled L`);
-        }
-    }
-});
-
-test('a defensive specialist is treated the same way', () => {
-    const lineup = ['s1', 'oh1', 'mb1', 's2', 'ds', 'mb2'];
-    const withDs = (id) => (id === 'ds' ? { id: 'ds', number: '11', position: 'DS' } : PLAYERS[id]);
-    const { roleOf, mismatches } = assignRoles(lineup, 1, withDs);
-    assert.equal(roleOf.ds, 'DS');
-    assert.deepEqual(mismatches, [], 'a DS in for a hitter is normal, not a mis-ordered lineup');
-});
-
-test('a genuinely mis-ordered lineup is still reported', () => {
-    // The check has to keep working for what it was built for.
-    const scrambled = ['s1', 'oh1', 's2', 'mb1', 'oh2', 'mb2'];
-    assert.equal(assignRoles(scrambled, 1, lookup).mismatches.length, 2);
-});
-
-test('the libero is still drawn on court in every formation', () => {
-    const lineup = ['s1', 'lib', 'mb1', 's2', 'oh2', 'mb2'];
-    const withLibero = (id) => (id === 'lib' ? { id: 'lib', number: '19', position: 'L' } : PLAYERS[id]);
-    for (const formation of ['rotation', 'base', 'receive']) {
-        const points = formationPoints({ lineup, rotation: 1, formation, playerLookup: withLibero });
-        assert.ok(points.lib, `${formation}: the libero has a place on court`);
-        assert.equal(Object.keys(points).length, 6, `${formation}: all six drawn`);
     }
 });

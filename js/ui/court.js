@@ -29,10 +29,12 @@ import {
     FORMATIONS,
     RECEIVE_STAGES,
     SYSTEMS,
+    RECEIVE_OPTIONS,
     afterReceiveFormation,
     assignRoles,
     formationPoints,
     keepsFrontRowOnReceive,
+    receiveIsProvisional,
 } from '../formations.js';
 import { liberoSheet } from '../libero.js';
 import { planPrompts } from '../plan.js';
@@ -46,6 +48,15 @@ import { el, mount, openSheet, closeSheet, toast, buzz, confirmDialog } from './
  * for checking the lineup against the referee.
  */
 let formation = 'base';
+
+/**
+ * Which of a system's receive options is drawn.
+ *
+ * The 5-1 sheet gives two per rotation and the 6-2 gives one, so this only ever
+ * surfaces where there is a real choice. Session-only, like `formation`: it is a
+ * viewing preference, not a fact about the set.
+ */
+let receiveOption = null;
 
 /** Whether the serve-receive view is showing the receive or where it ends up. */
 const isReceiveView = (key) => key === 'receive' || key === 'afterReceive';
@@ -697,12 +708,15 @@ function openCorrectSheet(store, live) {
 function courtMap(store, live, set) {
     const system = set?.system ?? DEFAULT_SYSTEM;
     const lookup = (id) => store.player(id);
+    const options = RECEIVE_OPTIONS[system] ?? null;
+    const option = options ? (options.some((o) => o.key === receiveOption) ? receiveOption : options[0].key) : null;
     const points = formationPoints({
         lineup: live.lineup,
         rotation: live.rotation,
         formation,
         system,
         playerLookup: lookup,
+        receiveOption: option,
     });
     const { roleOf, mismatches } = assignRoles(live.lineup, live.rotation, lookup, system);
     // The sheet is what knows each line's history, which is where the ring's
@@ -767,6 +781,21 @@ function courtMap(store, live, set) {
                 ),
             ),
 
+        // Only where the sheet actually draws a choice. The 6-2 has one
+        // formation per rotation and gets no toggle at all.
+        formation === 'receive' &&
+            options &&
+            el(
+                'div.segmented.segmented--sm.segmented--sub',
+                {},
+                options.map((choice) =>
+                    toggleButton(choice.label, choice.key === option, () => {
+                        receiveOption = choice.key;
+                        store.commit();
+                    }),
+                ),
+            ),
+
         el('p.court__hint', { text: current.note }),
 
         noSwitch &&
@@ -775,6 +804,14 @@ function courtMap(store, live, set) {
                     formation === 'afterReceive'
                         ? `Rotation ${live.rotation}: no switch — the outside stays right and the opposite stays outside, so they attack from where they received.`
                         : `Rotation ${live.rotation}: the front row does not switch after this receive. Tap After pass to see where they attack from.`,
+            }),
+        // A drawing the app is guessing at has to say so. In a timeout nobody
+        // can tell a default apart from the team's own sheet, and a coach will
+        // point at it either way.
+        formation === 'receive' &&
+            receiveIsProvisional(live.rotation, system) &&
+            el('p.court__hint.court__hint--note', {
+                text: `This ${system} receive is a standard pattern, not your sheet — the setter is front row here. Check it against your own before trusting it.`,
             }),
         mismatches.length > 0 &&
             el('p.court__hint.court__hint--warn', {

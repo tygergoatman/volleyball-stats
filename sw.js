@@ -23,6 +23,7 @@ const NETWORK_TIMEOUT_MS = 3500;
 const SHELL = [
     './',
     './index.html',
+    './trends.html',
     './roster.json',
     './manifest.webmanifest',
     './css/app.css',
@@ -32,6 +33,7 @@ const SHELL = [
     // never ran online would die on the *first* import, not on the tab that
     // needed them. Add the file here in the same change that creates it.
     './js/app.js',
+    './js/trends.js',
     './js/model.js',
     './js/stats.js',
     './js/store.js',
@@ -39,8 +41,10 @@ const SHELL = [
     './js/libero.js',
     './js/formations.js',
     './js/plan.js',
+    './js/season.js',
     './js/subring.js',
     './js/ui/dom.js',
+    './js/ui/chart.js',
     './js/ui/court.js',
     './js/ui/subs.js',
     './js/ui/subring.js',

@@ -394,6 +394,46 @@ export function toCsv(roster, lines) {
     return rows.join('\n');
 }
 
+/**
+ * The season as one row per player per match — the shape a spreadsheet can
+ * actually chart.
+ *
+ * `toCsv` writes a *summary*: one row per player, totals only, with the date and
+ * opponent nowhere inside the file. Every game-to-game question is averaged away
+ * before it reaches the spreadsheet, and reconstructing it means exporting each
+ * match by hand and stitching files that do not say which match they came from.
+ *
+ * This is the same columns with three added in front, and a row per appearance
+ * instead of per player. Sort it, pivot it, chart it — it is tidy data.
+ *
+ * @param {Array<object>} matches in played order
+ * @param {(id: string) => object|undefined} playerLookup
+ * @returns {string}
+ */
+export function toMatchCsv(matches, playerLookup) {
+    const head = ['Date', 'Opponent', 'Sets', ...CSV_COLUMNS.map(([header]) => header)];
+    const rows = [head.join(',')];
+
+    for (const match of matches) {
+        const lines = aggregateMatch(match);
+        const sets = (match.sets ?? []).filter((set) => set.complete).length;
+        for (const [playerId, line] of lines) {
+            const player = playerLookup(playerId);
+            if (!player) continue;
+            const derived = derive(line);
+            rows.push(
+                [
+                    escapeCsv(match.date),
+                    escapeCsv(match.opponent),
+                    sets,
+                    ...CSV_COLUMNS.map(([, read]) => escapeCsv(read(player, line, derived))),
+                ].join(','),
+            );
+        }
+    }
+    return rows.join('\n');
+}
+
 /** Format a rate as a volleyball-style three-decimal figure (e.g. `.286`, `-.071`). */
 export function formatPct(value) {
     if (value === null || value === undefined) return '—';

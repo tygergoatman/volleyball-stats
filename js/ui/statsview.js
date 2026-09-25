@@ -12,8 +12,10 @@ import {
     formatPct,
     rotationBreakdown,
     toCsv,
+    toMatchCsv,
     totalLine,
 } from '../stats.js';
+import { inPlayedOrder } from '../season.js';
 import { el, mount, toast, downloadText } from './dom.js';
 
 /**
@@ -175,6 +177,32 @@ export function renderStats(root, store) {
                     );
                     toast('CSV downloaded');
                 },
+            }),
+            // The one that can be charted. The summary above answers "how did
+            // she do this year"; this one answers "how did she do each week",
+            // which is the question a spreadsheet is for.
+            el('button.btn.btn--ghost', {
+                type: 'button',
+                text: 'Export season by match (CSV)',
+                onClick: () => {
+                    const team = seasonTeam(store);
+                    const matches = inPlayedOrder(team ? store.matchesFor(team.id) : store.state.matches);
+                    if (matches.length === 0) {
+                        toast('No matches to export', 'warn');
+                        return;
+                    }
+                    const stamp = new Date().toISOString().slice(0, 10);
+                    const slug = team?.name?.toLowerCase().replace(/\W+/g, '-') ?? 'team';
+                    downloadText(
+                        `stats-${slug}-by-match-${stamp}.csv`,
+                        toMatchCsv(matches, (id) => store.player(id)),
+                        'text/csv',
+                    );
+                    toast(`${matches.length} matches exported`);
+                },
+            }),
+            el('p.panel__hint', {
+                text: 'One row per player per match, with the date and opponent in the row — the shape a spreadsheet can chart. The season dashboard reads a full backup instead.',
             }),
         ]),
     );

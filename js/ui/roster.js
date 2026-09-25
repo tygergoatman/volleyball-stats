@@ -8,6 +8,7 @@
  */
 
 import { POSITION_COLORS, ROSTER_POSITIONS, colorForPosition, playerLabel } from '../model.js';
+import { aggregateSeason, derive, formatAvg, formatPct } from '../stats.js';
 import { APP_VERSION } from '../version.js';
 import { el, mount, openSheet, closeSheet, toast, confirmDialog, downloadText, shareFile } from './dom.js';
 
@@ -343,6 +344,88 @@ async function confirmRemoveTeam(store, team, fromFile, poolCount, matchCount) {
 
 /* ------------------------------------------------------------ player sheet */
 
+/* ---------------------------------------------------------- player card */
+
+/**
+ * Which team's season the card should total.
+ *
+ * A player who swings between JV and Varsity has two separate seasons, not one
+ * — a JV kill does not belong in a Varsity line — so the card has to pick, and
+ * then **say which one it picked**. The filter in effect is the best guess at
+ * what the coach is looking at; a player on one team only is unambiguous.
+ */
+function cardTeam(store, player) {
+    if (filterTeamId && filterTeamId !== UNTAGGED && player.teams.includes(filterTeamId)) {
+        return store.team(filterTeamId);
+    }
+    if (player.teams.length === 1) return store.team(player.teams[0]);
+    if (store.activeTeam && player.teams.includes(store.activeTeam.id)) return store.activeTeam;
+    return store.team(player.teams[0]) ?? null;
+}
+
+/** Matches in which this player actually recorded something. */
+function matchesPlayed(matches, playerId) {
+    return matches.filter((match) =>
+        (match.sets ?? []).some((set) => (set.events ?? []).some((event) => event.playerId === playerId)),
+    ).length;
+}
+
+/**
+ * A season snapshot for one player, at the top of their record.
+ *
+ * **Every rate carries its attempt count underneath**, and that is the point of
+ * the layout rather than decoration. A .667 hitting percentage off three swings
+ * is noise, and a card that shows the rate alone invites a decision on it. The
+ * attempts are what say whether the number means anything yet.
+ */
+function playerCard(store, player) {
+    const team = cardTeam(store, player);
+    const matches = team ? store.matchesFor(team.id) : store.state.matches;
+    const line = aggregateSeason(matches).get(player.id);
+
+    if (!line) {
+        return el('div.card', {}, [
+            el('p.card__empty', {
+                text: team
+                    ? `No stats recorded for ${player.number ? `#${player.number}` : 'this player'} on ${team.name} yet.`
+                    : 'No stats recorded yet.',
+            }),
+        ]);
+    }
+
+    const d = derive(line);
+    const played = matchesPlayed(matches, player.id);
+    const passErrPct = line.pass.att ? line.pass.zero / line.pass.att : null;
+
+    /** One tile: the headline number, what it is, and what it rests on. */
+    const tile = (label, value, footer, tone = '') =>
+        el(`div.card__tile${tone}`, {}, [
+            el('span.card__val', { text: value }),
+            el('span.card__lab', { text: label }),
+            el('span.card__sub', { text: footer }),
+        ]);
+
+    const attempts = (n) => `${n} att`;
+
+    return el('div.card', {}, [
+        // No name here: the sheet's own title already says who this is, and
+        // repeating it costs a line the tiles can use.
+        el('span.card__scope', {
+            text: `${team ? `${team.name} season` : 'Season'} · ${played} match${played === 1 ? '' : 'es'}`,
+        }),
+        el('div.card__grid', {}, [
+            tile('Pass avg', formatAvg(d.passAvg), attempts(d.passAtt)),
+            tile('Pass err', formatPct(passErrPct), `${line.pass.zero} shank${line.pass.zero === 1 ? '' : 's'}`, '.card__tile--bad'),
+            tile('Hit %', formatPct(d.hitPct), attempts(d.attackAtt)),
+            tile('Kills', String(line.attack.kills), `${line.attack.errors} err`),
+            tile('Serve err', formatPct(d.serveErrPct), attempts(d.serveAtt), '.card__tile--bad'),
+            tile('Aces', String(line.serve.aces), formatPct(d.acePct)),
+            tile('Digs', String(line.dig.digs), `${d.blockTotal} block${d.blockTotal === 1 ? '' : 's'}`),
+            tile('Points', String(d.pointsScored), `${d.errorsCommitted} err`),
+        ]),
+    ]);
+}
+
 function openPlayerSheet(store, player) {
     const isNew = !player;
     const draft = {
@@ -422,6 +505,10 @@ function openPlayerSheet(store, player) {
     );
 
     const body = el('div.form', {}, [
+        // The snapshot goes first: opening a player to *read* them is now at
+        // least as common as opening one to edit them, and the form is still
+        // right there underneath.
+        !isNew && playerCard(store, player),
         el('div.form__row', {}, [
             el('label.field.field--num', {}, [el('span.field__label', { text: 'Number' }), numberInput]),
             el('label.field.field--grow', {}, [el('span.field__label', { text: 'Name' }), nameInput]),

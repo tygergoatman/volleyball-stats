@@ -11,6 +11,7 @@
  * however it was made.
  */
 
+import { DEFAULT_SYSTEM, SYSTEMS } from '../formations.js';
 import { SERVING_ORDER, SUB_LIMIT, liberoSheet } from '../libero.js';
 import { POSITION_LABELS, isLibero, playerLabel } from '../model.js';
 import { plannedSubCost } from '../plan.js';
@@ -59,7 +60,7 @@ export function renderSubs(root, store, actions) {
     // tracking sheet is what you hunt through mid-game to find a player, so it
     // goes first; the plan is read at a stoppage; the substitution counter is
     // checked once or twice a set and goes last.
-    mount(root, rowsPanel(store, sheet), planPanel(store), countPanel(store, set, sheet));
+    mount(root, rowsPanel(store, sheet), systemPanel(store, set), planPanel(store), countPanel(store, set, sheet));
     return root;
 }
 
@@ -73,6 +74,45 @@ export function renderSubs(root, store, actions) {
  * a player should come back means prompting at the wrong moment, which is worse
  * than not prompting at all.
  */
+/**
+ * The offence the court is drawn as, switchable mid-set.
+ *
+ * It lives here rather than on the Court tab because changing it is a stoppage
+ * decision made next to the other stoppage decisions, and because the Court tab
+ * has no pixels to spare. It only reaches the *drawing*: the score, the
+ * rotation and every recorded stat are untouched, which is why it is safe to
+ * flip mid-match and flip back.
+ */
+function systemPanel(store, set) {
+    const current = set.system ?? DEFAULT_SYSTEM;
+    const chosen = SYSTEMS.find((system) => system.key === current) ?? SYSTEMS[0];
+
+    return el('section.panel', {}, [
+        el('h2.panel__title', { text: 'Offence' }),
+        el(
+            'div.segmented',
+            {},
+            SYSTEMS.map((system) =>
+                el('button.seg', {
+                    type: 'button',
+                    class: system.key === current ? 'seg--on' : '',
+                    text: system.label,
+                    onClick: () => {
+                        if (system.key === current) return;
+                        store.setSystem(system.key);
+                        buzz();
+                        toast(`Set ${set.number} drawn as a ${system.label}`);
+                    },
+                }),
+            ),
+        ),
+        el('p.panel__hint', { text: chosen.blurb }),
+        el('p.panel__hint', {
+            text: 'Applies to this set only, and changes the court drawing — the Base and Serve Rcv views and whether the setter reads as a setter in the front row. Nothing already recorded moves.',
+        }),
+    ]);
+}
+
 function planPanel(store) {
     const team = planTeam(store);
     if (!team) return null;

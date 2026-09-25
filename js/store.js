@@ -786,6 +786,23 @@ export class Store {
         });
     }
 
+    /**
+     * Change the offensive system the active set is drawn as.
+     *
+     * Safe mid-set, and that is deliberate: `system` is *input*, not derived —
+     * it changes which formation tables the court reads and nothing else. No
+     * score, no rotation, no recorded event depends on it, so switching at 14-12
+     * because the setter went to the front row costs nothing and can be switched
+     * straight back.
+     */
+    setSystem(system) {
+        this.update((state) => {
+            const match = state.matches.find((m) => m.id === state.activeMatchId);
+            const set = match?.sets.find((s) => s.id === state.activeSetId);
+            if (set) set.system = system;
+        });
+    }
+
     markSetComplete(id, complete = true) {
         this.update((state) => {
             const match = state.matches.find((m) => m.id === state.activeMatchId);

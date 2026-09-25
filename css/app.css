@@ -3140,3 +3140,466 @@ body.wb-open {
     color: var(--muted);
     pointer-events: none;
 }
+
+/* --------------------------------------------------------------- player card
+
+   A season snapshot at the top of a player's record. Four columns of two lines
+   each: the number, what it is, and the attempts it rests on. The attempts are
+   not decoration — a .667 hitting percentage off three swings is noise, and the
+   card must not invite a decision on it. */
+
+.card {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+}
+
+.card__scope {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+}
+
+.card__grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+
+.card__tile {
+    display: grid;
+    gap: 1px;
+    padding: 8px 4px;
+    border-radius: 10px;
+    background: var(--surface-3);
+    text-align: center;
+    min-width: 0;
+}
+
+.card__val {
+    font-size: 17px;
+    font-weight: 800;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.card__lab {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+/* The attempts line. Quieter than the label above it: it is context for the
+   number, not a stat of its own. */
+.card__sub {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--muted);
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Rates where lower is better, so the eye does not read them as achievements. */
+.card__tile--bad .card__val {
+    color: color-mix(in srgb, var(--bad) 60%, #fff);
+}
+
+.card__empty {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* Three across below about 360px — four tiles of numbers this size start
+   clipping their labels on the narrowest phones. */
+@media (max-width: 360px) {
+    .card__grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* ================================================================== trends
+
+   The season dashboard (`trends.html`). A desk page, so unlike the rest of this
+   stylesheet it is allowed to assume width — but it still has to survive being
+   opened on the phone that captured the season, which is the likeliest way it
+   gets looked at first. */
+
+.trends {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px 16px 64px;
+    display: grid;
+    gap: 16px;
+}
+
+.trends__welcome {
+    display: grid;
+    gap: 12px;
+    justify-items: start;
+    padding: 24px 0;
+}
+
+.trends__title {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 800;
+}
+
+.trends__lede,
+.trends__source,
+.trends__note,
+.trends__ver,
+.trends__empty {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.trends__ver {
+    font-size: 11px;
+    opacity: 0.6;
+}
+
+.trends__error {
+    margin: 0;
+    color: var(--bad);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.trends__file {
+    display: grid;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.trends__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.trends__body {
+    display: grid;
+    gap: 16px;
+}
+
+/* A grid item's default `min-width: auto` is its content's minimum, so the wide
+   season table pushed the whole page out to 750px on a phone and `overflow-x`
+   on the wrapper never got a chance to act. Every level from the body grid down
+   to the scroller has to opt out of that. */
+.trends > *,
+.trends__body > *,
+.trends .tablewrap,
+.trends .panel > * {
+    min-width: 0;
+}
+
+/* The season in one line: every result, in order. Scrolls sideways rather than
+   wrapping, so the shape of the run stays readable. */
+.strip {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.strip__cell {
+    flex: 0 0 auto;
+    min-width: 78px;
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    text-align: center;
+}
+
+.strip__op {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 92px;
+}
+
+.strip__res {
+    font-size: 15px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.strip__date {
+    font-size: 10px;
+    color: var(--muted);
+    opacity: 0.8;
+}
+
+.strip__cell--win {
+    border-color: color-mix(in srgb, var(--good) 55%, var(--border));
+    background: color-mix(in srgb, var(--good) 16%, var(--surface-3));
+}
+
+.strip__cell--win .strip__res {
+    color: var(--good);
+}
+
+.strip__cell--loss {
+    border-color: color-mix(in srgb, var(--bad) 55%, var(--border));
+    background: color-mix(in srgb, var(--bad) 14%, var(--surface-3));
+}
+
+.strip__cell--loss .strip__res {
+    color: var(--bad);
+}
+
+.card__grid--wide {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+/* --------------------------------------------------------------- charts */
+
+.chartbox {
+    margin: 0;
+    padding: 12px 0 4px;
+    border-top: 1px solid var(--border);
+}
+
+.chartbox:first-of-type {
+    border-top: 0;
+}
+
+.chartbox__cap {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.chartbox__name {
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.chartbox__dir {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    text-transform: uppercase;
+}
+
+.chartbox__hint {
+    margin: 2px 0 6px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* The slot is what has width; the chart inside it is drawn to match. Both are
+   block so the SVG does not pick up a text baseline gap. */
+.chartslot {
+    display: block;
+    width: 100%;
+    min-height: 260px;
+}
+
+.chart {
+    display: block;
+    max-width: 100%;
+    overflow: visible;
+}
+
+.chart__grid {
+    stroke: var(--border);
+    stroke-width: 1;
+}
+
+.chart__zero {
+    stroke: var(--muted);
+    stroke-width: 1.5;
+    stroke-dasharray: 4 4;
+    opacity: 0.8;
+}
+
+.chart__ylab,
+.chart__xlab,
+.chart__barval {
+    fill: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    font-family: inherit;
+}
+
+.chart__barval {
+    fill: var(--text);
+}
+
+.chart__line {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* Series colours by order. Two is the most any chart here draws. */
+.chart__line--0,
+.chart__dot--0 {
+    stroke: var(--us);
+}
+
+.chart__dot--0 {
+    fill: var(--us);
+}
+
+.chart__line--1,
+.chart__dot--1 {
+    stroke: var(--warn);
+}
+
+.chart__dot--1 {
+    fill: var(--warn);
+}
+
+.chart__dot {
+    stroke-width: 2;
+}
+
+.chart__bar--pos {
+    fill: color-mix(in srgb, var(--good) 80%, #000);
+}
+
+.chart__bar--neg {
+    fill: color-mix(in srgb, var(--bad) 74%, #000);
+}
+
+.legend {
+    display: flex;
+    gap: 14px;
+    padding: 2px 0 6px 46px;
+}
+
+.legend__item {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.legend__item::before {
+    content: '';
+    width: 12px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--muted);
+}
+
+.legend__item--0::before {
+    background: var(--us);
+}
+
+.legend__item--1::before {
+    background: var(--warn);
+}
+
+/* ---------------------------------------------------------- ranked list */
+
+.ranked {
+    display: grid;
+    gap: 5px;
+    margin-top: 12px;
+}
+
+.ranked__title {
+    margin: 0 0 2px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.ranked__row {
+    display: grid;
+    grid-template-columns: minmax(110px, 180px) 1fr 36px;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+}
+
+.ranked__bar {
+    display: block;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    overflow: hidden;
+}
+
+.ranked__fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bad) 66%, var(--surface-3));
+}
+
+.ranked__n {
+    text-align: right;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ big table */
+
+.tablewrap {
+    overflow-x: auto;
+}
+
+.trends .statstable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.trends .statstable th,
+.trends .statstable td {
+    padding: 6px 8px;
+    text-align: right;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+}
+
+.trends .statstable__num {
+    text-align: left;
+    font-weight: 800;
+}
+
+.statstable__sort {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--muted);
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.statstable__sort--on {
+    color: var(--text);
+}

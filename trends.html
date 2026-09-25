@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <title>Season Trends — Volleyball Stats</title>
+        <meta name="description" content="Season trends for the volleyball stats app. Reads a backup file on your own device." />
+        <meta name="theme-color" content="#0f1115" />
+        <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="./css/app.css" />
+    </head>
+    <!-- Deliberately not part of the app shell: no tab bar, no dock, no
+         manifest link. This is a desk page for reading a season, and it must not
+         be able to disturb the thing that captures one. It shares only the
+         stylesheet and the pure modules. -->
+    <body class="trends">
+        <main id="trends"></main>
+        <noscript>
+            <p style="padding: 2rem; color: #e8ecf2">This page needs JavaScript enabled.</p>
+        </noscript>
+        <script type="module" src="./js/trends.js"></script>
+    </body>
+</html>

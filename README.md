@@ -73,7 +73,16 @@ The Roster tab lists the teams, then the whole roster with a filter row: **All**
 team, and **No team** if anyone is untagged. Filtering answers "who is on JV?" without duplicating
 anybody.
 
-Tapping a player opens their record, including a multi-select of teams. Ticking Varsity on a JV
+**Tapping a player opens their card** — a season snapshot above their record: passing average and
+error rate, hitting %, kills, serve error rate, aces, digs and blocks, points scored and errors.
+
+Every rate shows **what it is built on** underneath — `5 att`, `1 shank` — because a .400 hitting
+percentage off five swings and off eighty are different facts, and the card should not let you
+forget which one you are looking at. The heading says whose season it is (`JV season · 9 matches`)
+and counts only the matches that player actually appeared in. A swing player gets her JV and
+Varsity numbers kept apart, the same way the Stats tab does it.
+
+Under the card is the record itself, including a multi-select of teams. Ticking Varsity on a JV
 player makes them available to both. Untagging is how you take someone off a team — they stay on
 the program roster, and their recorded stats are untouched. **Delete player** is the separate,
 heavier action that removes them from the program entirely.
@@ -145,6 +154,28 @@ in the net strip says which one you are looking at.
 
 Base comes from your 6-2 rotation sheets: hitters switch sides, and whichever setter is back row
 releases to position 1 while the other plays opposite at position 2.
+
+### 6-2 or 5-1
+
+**Subs tab → Offence.** Switch whenever you like, including mid-set, and switch back. It changes
+only how the court is *drawn* — the score, the rotation and everything already recorded are
+untouched, and no event is written.
+
+The two systems put the same six roles in the same six rotational spots, so nobody moves when you
+switch. What changes is who sets:
+
+- In a **5-1** the setter is the setter in all six rotations. She is back row in rotations 1–3 and
+  **front row in 4–6**, where the app now shows her as the setter rather than as the opposite.
+- Base positions follow: the setter plays position 1 when she is back row and position 2 when she is
+  front row, with the opposite taking whichever of those she is not in.
+
+**Serve receive comes from your own 5-1 sheet**, all six rotations. Because that sheet draws two
+formations per rotation, the receive view gains an **Opt 1 / Opt 2** row when you are in a 5-1 — the
+6-2 sheet draws one per rotation and gets no toggle.
+
+Bubbles overlap in the receive view, as they do on paper, and where your sheet tucks the setter right
+behind a team-mate the app spreads them a little so both numbers stay readable. The arrangement is
+yours; only the spacing is the app's.
 
 Roles — S1, OH2, MB1 — are worked out from the serving order and shown on each bubble. Nothing extra
 to type. A role belongs to the rotation slot rather than the person, so a substitute inherits the
@@ -553,6 +584,31 @@ A match stopped early counts on sets won: a best-of-five you had to abandon at 2
 because it is one. Only a *completed* set counts, so a set sitting at 24–20 that nobody has closed
 out does not move the badge.
 
+## The season dashboard
+
+Open **`trends.html`** — the same address as the app with `trends.html` on the end — on a laptop or
+tablet. It is a reading page, not a capture page: no tab bar, nothing that can disturb a match in
+progress.
+
+It answers **how did the season go, match by match**:
+
+- **Results** — every match in order, W/L and set score, so the shape of the run is one glance.
+- **Season** — record, points for and against, and what share you earned rather than were given,
+  plus a ranked list of what you gave away most.
+- **Match by match** — points won (earned vs their errors), points given away, passing average,
+  hitting %, errors per set, serve error %. Hover any point for the date and opponent.
+- **Rotation differential** — points won minus lost in each rotation across the whole season.
+- **Player by match** — pick a number and see her passing average, hitting %, kills and errors
+  across the season. **A match she did not play is a gap in the line, not a zero.**
+- **Season totals** — every stat column at once, sortable. The table the phone has no room for.
+
+**Getting your season into it.** On the phone: Roster → Data → **Share backup**, and send the file to
+yourself. On the laptop: open `trends.html` and pick that file. Opened on the phone itself it offers
+the season already on the device, with no file needed.
+
+**Nothing is uploaded.** The page is published, the data never is — the file is read inside your
+browser and stays there, exactly like the roster.
+
 ## The whiteboard
 
 **☰ → Whiteboard.** A landscape scratch surface for a timeout. Mid-set it opens on your actual six in
@@ -584,6 +640,7 @@ It is a scratchpad on purpose — there is no library of saved plays and nothing
 ```
 volleyball-stats/
 ├── index.html              shell: header, view, docked controls, tab bar
+├── trends.html             the season dashboard — a reading page, not capture
 ├── roster.json             shared roster: numbers only, no names — see ROSTER.md
 ├── manifest.webmanifest    PWA metadata
 ├── sw.js                   offline precache (roster.json is network-first)
@@ -593,6 +650,8 @@ volleyball-stats/
 │   ├── libero.js           libero tracking sheet and sub counting        (pure)
 │   ├── plan.js             planned subs, and which are due right now     (pure)
 │   ├── subring.js          what a press-and-hold offers, and what it does not (pure)
+│   ├── season.js           a season as a sequence of matches, for charting (pure)
+│   ├── trends.js           the dashboard page
 │   ├── stats.js            aggregation and derived metrics               (pure)
 │   ├── store.js            state, persistence, actions
 │   ├── app.js              tab routing, match lifecycle, wake lock
@@ -601,6 +660,7 @@ volleyball-stats/
 │       ├── court.js        capture view and stat sheet
 │       ├── subs.js         libero tracking sheet, subs, the plan
 │       ├── subring.js      the press-and-hold ring on the court map
+│       ├── chart.js        inline-SVG line and bar charts, no dependency
 │       ├── statsview.js    stat tables and rotation breakdown
 │       ├── roster.js       roster, team settings, backup
 │       └── log.js          point-by-point log

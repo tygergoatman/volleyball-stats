@@ -23,7 +23,7 @@ export const DEFAULT_SYSTEM = '6-2';
 
 export const SYSTEMS = [
     { key: '6-2', label: '6-2', blurb: 'Two setters; whichever is back row sets' },
-    // 5-1 slots in here: one setter, one opposite, and its own BASE table.
+    { key: '5-1', label: '5-1', blurb: 'One setter all six rotations; she sets from the front row in three of them' },
 ];
 
 /**
@@ -33,6 +33,13 @@ export const SYSTEMS = [
  */
 export const SERVING_ORDER_ROLES = {
     '6-2': ['S1', 'OH1', 'MB1', 'S2', 'OH2', 'MB2'],
+    // **Structurally identical to the 6-2**, which is the single most useful
+    // fact about adding this system: the same six slots in the same order, with
+    // the second setter replaced by a true opposite. So a lineup entered for one
+    // reads correctly in the other, rotation numbers mean the same thing, and
+    // the setter is back row in rotations 1-3 and front row in 4-6 — which is
+    // where the two systems finally part company.
+    '5-1': ['S', 'OH1', 'MB1', 'OPP', 'OH2', 'MB2'],
 };
 
 /**
@@ -46,13 +53,20 @@ export const SERVING_ORDER_ROLES = {
 export const ROLE_POSITION = {
     S1: 'S',
     S2: 'S',
+    S: 'S',
+    OPP: 'OPP',
     OH1: 'OH',
     OH2: 'OH',
     MB1: 'MB',
     MB2: 'MB',
 };
 
-/** Roles that set from the back and hit opposite from the front. */
+/**
+ * Roles that set from the back and hit opposite from the front.
+ *
+ * A 6-2 thing only. The 5-1's `S` sets from wherever she is standing, which is
+ * the whole difference between the systems.
+ */
 const SETTER_ROLES = ['S1', 'S2'];
 
 /**
@@ -70,7 +84,16 @@ const SETTER_ROLES = ['S1', 'S2'];
  * @param {boolean} isFrontRow
  * @returns {{label: string, allowed: string[]}}
  */
-export function roleExpectations(role, isFrontRow) {
+export function roleExpectations(role, isFrontRow, system = DEFAULT_SYSTEM) {
+    // **In a 5-1 the setter is the setter in all six rotations.** She sets from
+    // the front row in three of them, and calling her the opposite there — which
+    // is correct for a 6-2 — would be the app misreading the system it was told
+    // it is in. This is the whole reason this function had to learn about
+    // systems rather than just about rows.
+    if (system === '5-1') {
+        const expected = ROLE_POSITION[role];
+        return { label: role, allowed: expected ? [expected] : [] };
+    }
     if (SETTER_ROLES.includes(role) && isFrontRow) {
         return { label: 'OPP', allowed: ['OPP', 'S'] };
     }
@@ -132,6 +155,30 @@ export const BASE = {
         4: { 1: 'S2', 2: 'S1', 3: 'MB2', 4: 'OH2', 5: 'OH1', 6: 'MB1' },
         5: { 1: 'S2', 2: 'S1', 3: 'MB2', 4: 'OH1', 5: 'OH2', 6: 'MB1' },
         6: { 1: 'S2', 2: 'S1', 3: 'MB1', 4: 'OH1', 5: 'OH2', 6: 'MB2' },
+    },
+
+    /**
+     * The 5-1, which is completely regular — six rules, no exceptions:
+     *
+     * - position 1 ← the setter when she is back row, the opposite when she is not
+     * - position 2 ← the setter when she is front row, the opposite when she is not
+     * - position 3 ← whichever middle is front row
+     * - position 4 ← whichever outside is front row
+     * - position 5 ← whichever outside is back row
+     * - position 6 ← whichever middle is back row
+     *
+     * Written out rather than derived so it can be read at a glance against a
+     * rotation sheet, and `tests/formations.test.js` asserts the six rules hold
+     * for all six rotations — so a typo here fails rather than quietly drawing
+     * somebody in the wrong place.
+     */
+    '5-1': {
+        1: { 1: 'S', 2: 'OPP', 3: 'MB1', 4: 'OH1', 5: 'OH2', 6: 'MB2' },
+        2: { 1: 'S', 2: 'OPP', 3: 'MB1', 4: 'OH2', 5: 'OH1', 6: 'MB2' },
+        3: { 1: 'S', 2: 'OPP', 3: 'MB2', 4: 'OH2', 5: 'OH1', 6: 'MB1' },
+        4: { 1: 'OPP', 2: 'S', 3: 'MB2', 4: 'OH2', 5: 'OH1', 6: 'MB1' },
+        5: { 1: 'OPP', 2: 'S', 3: 'MB2', 4: 'OH1', 5: 'OH2', 6: 'MB1' },
+        6: { 1: 'OPP', 2: 'S', 3: 'MB1', 4: 'OH1', 5: 'OH2', 6: 'MB2' },
     },
 };
 
@@ -198,7 +245,203 @@ export const SERVE_RECEIVE = {
             MB2: { x: 0.81, y: 0.8 },
         },
     },
+
+    /**
+     * The 5-1, transcribed from the owner's own "5-1 SERVE RECEIVE FORMATIONS"
+     * sheet — the same source as the 6-2, and it arrived after an earlier
+     * version of this table had to guess at rotations 4-6.
+     *
+     * The sheet gives **two options per rotation**, so this table does too, and
+     * the court offers a toggle. Picking one for them would have been the same
+     * mistake as guessing.
+     *
+     * Reading the sheet: each panel is drawn net-at-top, so the upper row is
+     * positions 4-3-2 left to right and the lower row is 5-6-1. Blue letters are
+     * the front row, black the back row, red the setter — which is what makes it
+     * possible to tell the two OH and the two M apart. The rotational panels
+     * confirm `SERVING_ORDER_ROLES['5-1']` exactly.
+     *
+     * **Coordinates here are court space, not sheet band** — see `RECEIVE_SPACE`.
+     *
+     * A few are nudged a little wider than the sheet draws them. A court bubble
+     * is 30% of the court's width, so three across always overlap — the 6-2
+     * tables have the same property and the view says "reference only" because
+     * of it. Where the sheet tucks the setter directly behind a team-mate, that
+     * hid her number completely, so those pairs are separated just enough to
+     * read. The arrangement is the sheet's; the spacing is what a 393px screen
+     * can show.
+     */
+    '5-1': {
+        1: {
+            opt1: {
+                MB1: { x: 0.38, y: 0.24 },
+                OH1: { x: 0.7, y: 0.22 },
+                S: { x: 0.82, y: 0.34 },
+                OPP: { x: 0.16, y: 0.7 },
+                OH2: { x: 0.42, y: 0.72 },
+                MB2: { x: 0.68, y: 0.72 },
+            },
+            opt2: {
+                OPP: { x: 0.16, y: 0.24 },
+                MB1: { x: 0.46, y: 0.24 },
+                OH2: { x: 0.3, y: 0.72 },
+                MB2: { x: 0.52, y: 0.72 },
+                OH1: { x: 0.76, y: 0.7 },
+                S: { x: 0.86, y: 0.36 },
+            },
+        },
+        2: {
+            opt1: {
+                OPP: { x: 0.38, y: 0.24 },
+                S: { x: 0.56, y: 0.34 },
+                MB1: { x: 0.72, y: 0.24 },
+                OH2: { x: 0.2, y: 0.68 },
+                MB2: { x: 0.44, y: 0.72 },
+                OH1: { x: 0.66, y: 0.72 },
+            },
+            opt2: {
+                OPP: { x: 0.46, y: 0.24 },
+                S: { x: 0.64, y: 0.34 },
+                MB1: { x: 0.8, y: 0.24 },
+                OH2: { x: 0.22, y: 0.68 },
+                MB2: { x: 0.46, y: 0.72 },
+                OH1: { x: 0.68, y: 0.72 },
+            },
+        },
+        3: {
+            opt1: {
+                MB2: { x: 0.14, y: 0.22 },
+                S: { x: 0.3, y: 0.36 },
+                OH2: { x: 0.52, y: 0.24 },
+                OH1: { x: 0.32, y: 0.72 },
+                MB1: { x: 0.52, y: 0.72 },
+                OPP: { x: 0.74, y: 0.7 },
+            },
+            opt2: {
+                MB2: { x: 0.14, y: 0.22 },
+                S: { x: 0.3, y: 0.36 },
+                OPP: { x: 0.84, y: 0.26 },
+                OH1: { x: 0.26, y: 0.72 },
+                OH2: { x: 0.48, y: 0.72 },
+                MB1: { x: 0.7, y: 0.72 },
+            },
+        },
+        // Rotations 4-6: the setter is front row and releases at the net rather
+        // than coming up from the back. This is the half the sheet was needed
+        // for — an earlier release shipped a textbook default here and said so
+        // on screen.
+        4: {
+            opt1: {
+                S: { x: 0.14, y: 0.2 },
+                MB2: { x: 0.32, y: 0.28 },
+                OH2: { x: 0.62, y: 0.26 },
+                OH1: { x: 0.18, y: 0.72 },
+                MB1: { x: 0.44, y: 0.72 },
+                OPP: { x: 0.7, y: 0.72 },
+            },
+            opt2: {
+                S: { x: 0.14, y: 0.2 },
+                MB2: { x: 0.34, y: 0.28 },
+                OH2: { x: 0.62, y: 0.26 },
+                OH1: { x: 0.18, y: 0.72 },
+                MB1: { x: 0.44, y: 0.72 },
+                OPP: { x: 0.7, y: 0.72 },
+            },
+        },
+        5: {
+            opt1: {
+                OH1: { x: 0.14, y: 0.24 },
+                S: { x: 0.4, y: 0.2 },
+                MB2: { x: 0.62, y: 0.28 },
+                MB1: { x: 0.2, y: 0.72 },
+                OPP: { x: 0.42, y: 0.72 },
+                OH2: { x: 0.64, y: 0.72 },
+            },
+            opt2: {
+                OH1: { x: 0.16, y: 0.24 },
+                S: { x: 0.5, y: 0.2 },
+                MB2: { x: 0.72, y: 0.28 },
+                MB1: { x: 0.2, y: 0.72 },
+                OPP: { x: 0.44, y: 0.72 },
+                OH2: { x: 0.64, y: 0.72 },
+            },
+        },
+        6: {
+            opt1: {
+                MB1: { x: 0.26, y: 0.26 },
+                OH1: { x: 0.44, y: 0.26 },
+                S: { x: 0.64, y: 0.2 },
+                OPP: { x: 0.22, y: 0.72 },
+                OH2: { x: 0.42, y: 0.72 },
+                MB2: { x: 0.62, y: 0.72 },
+            },
+            opt2: {
+                MB1: { x: 0.26, y: 0.26 },
+                OH1: { x: 0.46, y: 0.26 },
+                S: { x: 0.72, y: 0.2 },
+                OPP: { x: 0.22, y: 0.72 },
+                OH2: { x: 0.42, y: 0.72 },
+                MB2: { x: 0.62, y: 0.72 },
+            },
+        },
+    },
 };
+
+/**
+ * The receive options a system's sheet offers, if it offers more than one.
+ *
+ * The 6-2 sheet draws one formation per rotation; the 5-1 sheet draws two. So
+ * this is per system rather than a global setting, and the court only shows a
+ * toggle where there is a real choice to make.
+ */
+export const RECEIVE_OPTIONS = {
+    '5-1': [
+        { key: 'opt1', label: 'Opt 1' },
+        { key: 'opt2', label: 'Opt 2' },
+    ],
+};
+
+/**
+ * Which coordinate space a system's receive table is written in.
+ *
+ * The 6-2 numbers came out of a PDF where every player is drawn between the
+ * attack line and the end line, so they are stretched over the playable height
+ * by `spreadDepth`. The 5-1 sheet draws the net row *at the net*, so its numbers
+ * are already true court fractions and stretching them would shove the setter
+ * into the middle of the floor. Mixing the two silently would be a bug nobody
+ * could see without a ruler.
+ */
+export const RECEIVE_SPACE = { '6-2': 'band', '5-1': 'court' };
+
+/**
+ * The receive drawing for one rotation, whichever shape its system stores.
+ *
+ * @returns {Record<string, {x: number, y: number}>|null}
+ */
+export function receiveTable(system, rotation, option = null) {
+    const entry = SERVE_RECEIVE[system]?.[rotation];
+    if (!entry) return null;
+    const options = RECEIVE_OPTIONS[system];
+    if (!options) return entry;
+    return entry[option ?? options[0].key] ?? entry[options[0].key] ?? null;
+}
+
+/**
+ * Receive patterns the app is guessing at, by system.
+ *
+ * **Empty, and worth keeping empty.** Both systems now come from the owner's own
+ * sheets. It existed for one release when the 5-1's rotations 4-6 were a
+ * textbook default, and the court printed a line saying so — because a picture a
+ * coach cannot tell apart from their own sheet is worse than no picture: it gets
+ * trusted in a timeout. Keep the mechanism for the next time something has to
+ * ship ahead of its data.
+ */
+export const PROVISIONAL_RECEIVE = {};
+
+/** Whether the receive drawing for this rotation is a default rather than theirs. */
+export function receiveIsProvisional(rotation, system = DEFAULT_SYSTEM) {
+    return (PROVISIONAL_RECEIVE[system] ?? []).includes(rotation);
+}
 
 /**
  * Rotations where the front row does **not** switch after receiving — the
@@ -210,7 +453,12 @@ export const SERVE_RECEIVE = {
  * rotations the movement the sheet's arrows show is serve-receive → Rotation,
  * not serve-receive → Base.
  */
-export const NO_SWITCH_ROTATIONS = { '6-2': [1, 4] };
+export const NO_SWITCH_ROTATIONS = {
+    '6-2': [1, 4],
+    // Unknown for the 5-1 until the sheets say otherwise, and an empty list is
+    // the honest default: it claims nothing.
+    '5-1': [],
+};
 
 /** Where each court position sits, so every view can be placed the same way. */
 export const POSITION_POINT = {
@@ -296,7 +544,7 @@ export function assignRoles(lineup = [], rotation = 1, playerLookup = () => unde
         // What this slot means depends on the row it is standing in: a setter
         // slot in the front row is the opposite, and is labelled and checked
         // as one.
-        const { label, allowed } = roleExpectations(role, FRONT_ROW.includes(position));
+        const { label, allowed } = roleExpectations(role, FRONT_ROW.includes(position), system);
         roleOf[playerId] = label;
 
         // An untagged player says nothing either way, and a player who plays
@@ -377,6 +625,7 @@ export function formationPoints({
     lineup = [],
     rotation = 1,
     formation = 'rotation',
+    receiveOption = null,
     system = DEFAULT_SYSTEM,
     playerLookup = () => undefined,
 }) {
@@ -387,18 +636,22 @@ export function formationPoints({
             formation: afterReceiveFormation(rotation, system),
             system,
             playerLookup,
+            receiveOption,
         });
     }
 
     const points = {};
 
     if (formation === 'receive') {
-        const table = SERVE_RECEIVE[system]?.[rotation];
+        const table = receiveTable(system, rotation, receiveOption);
         if (table) {
+            // Band coordinates get stretched over the playable height; court
+            // coordinates are already there. See `RECEIVE_SPACE`.
+            const depth = RECEIVE_SPACE[system] === 'court' ? (y) => y : spreadDepth;
             const { byRole } = assignRoles(lineup, rotation, playerLookup, system);
             for (const [role, point] of Object.entries(table)) {
                 const playerId = byRole[role];
-                if (playerId) points[playerId] = { x: point.x, y: spreadDepth(point.y) };
+                if (playerId) points[playerId] = { x: point.x, y: depth(point.y) };
             }
             // Anyone the roles do not cover keeps their rotational spot.
             for (let position = 1; position <= 6; position++) {

@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.09.23a** (`js/version.js`).
+Current version: **2026.09.25b** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 75 tests — see the warning below
+node --test "tests/*.test.js"                          # 99 tests — see the warning below
 ```
 
 **The unit tests were lost and are not coming back on their own.** The remote working copy was
@@ -31,7 +31,7 @@ the owner still had the zip. Two consequences:
 - Rebuilding is happening **as code is touched**, not as one sitting: `privacy.test.js` first because
   it guards a hard constraint, then `model`, `store` and `stats` covering what 2026.09.12a and
   2026.09.13a added, and `sw.test.js` because the SHELL guard it describes had itself been lost.
-  75 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
+  99 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
   covered". Anything older than that is unguarded until someone writes it. The modules are
   intact and well commented, but some of the lost tests encoded decisions made in conversation, and
   those reasons live in this file rather than in the code.
@@ -990,6 +990,164 @@ and knowing what to look at once it is on the phone.
   is the scannable summary, so a handful of lines is right.
 - **Name the version and say what it replaces**, since two zips a day happen and installing the older
   one silently undoes work.
+
+## The 5-1 (2026.09.25b)
+
+Pinned for weeks because the serve-receive coordinates had no source. Unpinned
+when the owner said what they actually needed: *"It would really only affect 3
+rotations for serve receive and showing the setter in the front row."* That
+turned out to be exactly right, and it is why this was small.
+
+### The fact that made it cheap
+
+**The two systems share a serving order.** `['S1','OH1','MB1','S2','OH2','MB2']`
+and `['S','OH1','MB1','OPP','OH2','MB2']` are the same six slots in the same
+order, with the second setter replaced by a true opposite. Consequences:
+
+- A lineup entered for one reads correctly in the other; rotation numbers mean
+  the same thing in both. Switching mid-set does not move anybody.
+- The 6-2's back-row setter is `S1` in rotations 1-3 and `S2` in 4-6, so the
+  5-1's single setter is **back row in 1-3 and front row in 4-6** — the three
+  the owner named, arrived at independently.
+- **Rotations 1-3 of the 5-1 receive are the owner's own sheet, renamed**
+  (`S1`→`S`, `S2`→`OPP`). The same drawing with two labels changed, not an
+  invention. A test asserts the rename rather than duplicating the numbers.
+
+### The receive came from the owner's sheet, and the guess was wrong
+
+This shipped for about an hour with rotations 4-6 as a textbook default, marked
+`PROVISIONAL_RECEIVE` and labelled on screen. The owner then sent the real "5-1
+SERVE RECEIVE FORMATIONS" sheet, and it is worth recording what it showed:
+
+- **The rotational panels confirmed `SERVING_ORDER_ROLES['5-1']` exactly** —
+  derived independently, and right.
+- **Rotations 1-3 were *not* the 6-2 renamed.** That derivation looked airtight
+  — same serving order, setter back row in both, so the picture must be the same
+  — and it is wrong in all three, by more than a tenth of the court in places.
+  The systems share a serving order; they do not share a passing formation.
+  `tests/formations.test.js` asserts they differ, so nobody re-derives it.
+- **The sheet gives two options per rotation**, so the table does too and the
+  court offers a toggle. Picking one for them would have been the same mistake
+  in a smaller costume.
+
+Reading the sheet: each panel is net-at-top, upper row is positions 4-3-2 left to
+right, lower is 5-6-1. Blue is the front row, black the back row, red the setter
+— which is the only way to tell the two OH and the two M apart.
+
+**Keep `PROVISIONAL_RECEIVE` even though it is now empty.** The one release it
+was used for was the right call: a picture a coach cannot tell apart from their
+own sheet gets trusted in a timeout.
+
+### The spacing is the app's, the arrangement is the sheet's
+
+A court bubble is 30% of the court's width, so three across always overlap — the
+6-2 has the same property, which is why the view says "reference only". Where the
+sheet tucks the setter directly behind a team-mate it hid her number completely,
+so those pairs are nudged apart just enough to read. Caught by rendering all
+twelve panels and looking, not by a test.
+
+### `roleExpectations` had to learn about systems
+
+**In a 5-1 the setter is the setter in all six rotations.** The 6-2 reads a
+front-row setter slot as the opposite — correct there, and dead wrong here,
+where setting from the front row in three rotations is the entire system. So the
+function takes `system` now. Getting this backwards would have the app
+misreading the system it was just told it was in.
+
+### The base table is written out and checked
+
+Six rules, no exceptions: position 1 takes the setter when she is back row and
+the opposite when she is not, 2 the reverse, 3 the front middle, 4 the front
+outside, 5 the back outside, 6 the back middle. Tabulated so it can be read
+against a rotation sheet, and `tests/formations.test.js` asserts the rules hold
+for all six — a hand-written table's typo is otherwise invisible, and would
+quietly draw somebody in the wrong place in a timeout.
+
+### Switching is a display change, and lives on the Subs tab
+
+`store.setSystem()` writes `set.system`, which is **input, not derived** — no
+score, rotation or recorded event depends on it. So it is safe mid-set and safe
+to switch back, which a test asserts by counting events across a switch. It sits
+on the Subs tab because it is a stoppage decision among stoppage decisions, and
+because the Court tab has no pixels to spare.
+
+## The season dashboard — `trends.html` (2026.09.24b)
+
+A second page in the same repo, not a second app. It answers "how did this go
+across the season", which the phone app deliberately does not: the tab bar is
+full, the screen is 393px, and reading a season is a sit-down job.
+
+### What it shares, and what it must not
+
+**It shares the brain and none of the body.** Data is loaded into a real `Store`
+and every number comes from `stats.js` / `season.js`, so the dashboard cannot
+drift from the Stats tab. It does **not** register the service worker, mount the
+tab bar, or import anything from `ui/court.js` — nothing on this page may touch
+the thing that records matches. That is also why it is a separate URL: a bug
+here cannot take the capture app down during a playoff match.
+
+**Nothing is uploaded.** The page is published; the data is not. It reads the
+season already in `localStorage`, or a backup file picked with `<input
+type=file>` and read in the browser. Same rule as `roster.json`.
+
+### `js/season.js` — the sequence, not the total
+
+Everything else in the app aggregates. `aggregateSeason` folds fifteen matches
+into one line; this module refuses to fold and returns one point per match. It
+computes nothing new — each point is the existing per-match aggregation kept
+separate — which is what makes a chart and the Stats tab unable to disagree.
+
+**A gap is not a zero.** `point.played` is false for a match the subject did not
+appear in, `seriesValues` yields `null` there, and the chart breaks the line. A
+zero would draw a line claiming she passed terribly that night. Same for a rate
+with no attempts: unknown, not perfect. Guarded by tests, because it is the
+mistake this whole module exists to avoid.
+
+### Charts are measured, not scaled
+
+`js/ui/chart.js` draws inline SVG with **one unit = one CSS pixel**, and the
+caller passes the width it actually has.
+
+The obvious alternative — a fixed viewBox stretched by CSS — was built first and
+is wrong. Scaled onto a 1150px desk screen it scaled the *text* too: 18px axis
+labels on a 420px-tall chart. Shrink the same viewBox to a 360px phone and the
+labels fall to 5px. No single ratio serves both. So `trends.js` puts an empty
+`.chartslot` in the tree, and `drawCharts()` measures each one after layout and
+fills it; a debounced `resize` listener redraws rather than rescales.
+
+Two smaller ones: counts get whole-number gridlines (a kills chart labelled
+1.125 reads as a mistake), and the number of x labels depends on the measured
+width rather than a fixed guess.
+
+### The grid trap, again
+
+At 393px the page scrolled sideways to 750px. A CSS grid item's default
+`min-width: auto` is its *content's* minimum, so the wide season table pushed
+every ancestor out and `overflow-x` on its wrapper never got a chance to act.
+`min-width: 0` is needed at every level from the body grid down to the scroller.
+
+## The player card on the Roster tab (2026.09.24a)
+
+A season snapshot at the top of a player's record: eight tiles, each a number,
+a label, and **the attempts it rests on**. Two decisions worth keeping:
+
+- **Every rate carries its sample size, and that is the design rather than
+  decoration.** A .667 hitting percentage off three swings is noise, and a card
+  showing the rate alone invites a decision on it. The attempts line is what
+  says whether the number means anything yet.
+- **The card names which team's season it is showing.** A player tagged JV and
+  Varsity has two seasons, not one — `aggregateSeason` is already scoped per
+  team for that reason — so `cardTeam()` picks (roster filter, then sole team,
+  then the open match's team) and `card__scope` says which. It also counts
+  **matches she appeared in**, not matches the team played, because "14
+  matches" next to a line built from 6 is a lie of omission.
+
+Nothing new is computed: `aggregateSeason` + `derive` already returned all of
+it, which is why the whole feature is one function and a stylesheet block. The
+only value not in `derive` is pass error rate, `pass.zero / pass.att`.
+
+Rates where lower is better (pass error, serve error) are tinted red so the eye
+does not read them as achievements.
 
 ## The result badge on the matches list (2026.09.19a)
 
