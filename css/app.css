@@ -972,6 +972,36 @@ button:disabled {
     border-style: dashed;
 }
 
+/*
+ * A set number is two characters; given `flex: 1` it would claim as much width
+ * as "Season". Shrink to content so five of them plus Match and Season still
+ * fit one row on a 393px phone.
+ */
+.seg--num {
+    flex: 0 0 auto;
+    padding-inline: 12px;
+}
+
+/* Which set is being played, so an unselected S3 still reads as "live". */
+.seg--live {
+    position: relative;
+}
+
+.seg--live::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--us);
+}
+
+.seg--live.seg--on::after {
+    background: #fff;
+}
+
 /* ------------------------------------------------------------ setup slots */
 
 .court--setup .court__grid {

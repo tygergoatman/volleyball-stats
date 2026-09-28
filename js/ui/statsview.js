@@ -22,8 +22,12 @@ import { el, mount, toast, downloadText } from './dom.js';
  * Which slice of the season is on screen, and which stat family. `teamId` only
  * applies to the season scope — set and match scopes take their team from the
  * open match.
+ *
+ * `setId` is null while the set scope should **follow the set in play**, which
+ * is what you want between points. Tapping an earlier set pins it, so looking
+ * back at set 1 during set 3 stays where you put it.
  */
-const view = { scope: 'set', category: 'pass', teamId: null, sort: null };
+const view = { scope: 'set', setId: null, category: 'pass', teamId: null, sort: null };
 
 /** The player column's heading, which sorts by jersey number rather than a stat. */
 const PLAYER_COLUMN = 'Player';
@@ -98,6 +102,23 @@ function seasonTeam(store) {
     );
 }
 
+/**
+ * The set the set scope is showing: the one you pinned, or the one in play.
+ *
+ * Falls back to the live set whenever the pin no longer resolves — a different
+ * match opened, or that set was deleted — so the tab cannot end up pointing at
+ * a set that is not on screen.
+ */
+function scopedSet(store) {
+    const match = store.activeMatch;
+    if (!match) return null;
+    const pinned = match.sets.find((s) => s.id === view.setId);
+    // Drop a pin that no longer resolves rather than carrying it: otherwise
+    // reopening the old match weeks later silently lands on set 1.
+    if (!pinned && view.setId !== null) view.setId = null;
+    return pinned ?? store.activeSet;
+}
+
 export function renderStats(root, store) {
     const match = store.activeMatch;
     const { lines, sets, scopeLabel } = collect(store);
@@ -106,8 +127,13 @@ export function renderStats(root, store) {
     mount(
         root,
         el('section.panel', {}, [
-            el('div.segmented', {}, [
-                scopeButton(store, 'set', 'This Set', !store.activeSet),
+            // One button per set of the open match, so "how did set 2 go" is a
+            // tap rather than a memory. They sit in the same row as Match and
+            // Season because they are the same choice — how wide a slice.
+            el('div.segmented.segmented--wrap', {}, [
+                ...(match && match.sets.length > 0
+                    ? match.sets.map((set) => setButton(store, set))
+                    : [scopeButton(store, 'set', 'Set', true)]),
                 scopeButton(store, 'match', 'Match', !match),
                 scopeButton(store, 'season', 'Season', false),
             ]),
@@ -170,8 +196,12 @@ export function renderStats(root, store) {
                     const stamp = new Date().toISOString().slice(0, 10);
                     const scoped = view.scope === 'season' ? seasonTeam(store) : store.activeTeam;
                     const team = scoped?.name?.toLowerCase().replace(/\W+/g, '-') ?? 'team';
+                    // Name the set in the filename: three exports from one match
+                    // otherwise overwrite each other in the downloads folder.
+                    const setNumber = scopedSet(store)?.number;
+                    const slice = view.scope === 'set' && setNumber ? `set${setNumber}` : view.scope;
                     downloadText(
-                        `stats-${team}-${view.scope}-${stamp}.csv`,
+                        `stats-${team}-${slice}-${stamp}.csv`,
                         toCsv(playersWithData(store, lines), lines),
                         'text/csv',
                     );
@@ -313,13 +343,14 @@ function countList(title, total, rows, tone) {
 /** Gather the stat lines and sets that match the selected scope. */
 function collect(store) {
     const match = store.activeMatch;
-    const set = store.activeSet;
+    const set = scopedSet(store);
 
     if (view.scope === 'set' && set) {
+        const live = set.id === store.state.activeSetId;
         return {
             lines: aggregate(set.events),
             sets: [set],
-            scopeLabel: `Set ${set.number} vs ${match.opponent}`,
+            scopeLabel: `Set ${set.number} vs ${match.opponent}${live ? ' · in play' : ''}`,
         };
     }
     if (view.scope === 'match' && match) {
@@ -353,6 +384,31 @@ function scopeButton(store, scope, label, disabled) {
         disabled,
         onClick: () => {
             view.scope = scope;
+            store.commit();
+        },
+    });
+}
+
+/**
+ * One set of the open match. Narrow — "S2" beside "Season" would look absurd
+ * given equal widths — hence `seg--num`.
+ *
+ * Choosing the set already in play clears the pin rather than setting it, so
+ * the tab goes back to following along when the next set starts. Choosing any
+ * other set pins it.
+ */
+function setButton(store, set) {
+    const live = set.id === store.state.activeSetId;
+    const shown = view.scope === 'set' && scopedSet(store)?.id === set.id;
+
+    return el('button.seg.seg--num', {
+        type: 'button',
+        class: [shown ? 'seg--on' : '', live ? 'seg--live' : ''].filter(Boolean).join(' '),
+        text: `S${set.number}`,
+        title: `Set ${set.number}${live ? ' · in play' : ''}`,
+        onClick: () => {
+            view.scope = 'set';
+            view.setId = live ? null : set.id;
             store.commit();
         },
     });

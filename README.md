@@ -413,6 +413,19 @@ them later. Substitutions cannot be edited in place; delete and re-record them f
 Whole sets can be deleted from the Log tab, which also renumbers what is left and re-targets the
 new deciding set.
 
+### Picking a scope: S1, S2, S3 … Match, Season
+
+The top row of the Stats tab has **one button per set of the open match**, then Match and Season.
+Everything below it — points, the stat table, rotation scoring, the CSV export — follows whichever
+you pick, so comparing set 1 to set 3 is two taps.
+
+The set being played carries a **blue dot**, and the tab starts on it. It also follows along: finish
+set 2 and start set 3 and the tab moves to S3 on its own, which is what you want between points.
+Tap an earlier set and it stays there until you tap the live one again — so looking back at set 1
+during set 3 doesn't get yanked away.
+
+With no match open there is a single greyed-out **Set** button, and Season is the one that works.
+
 ### Points: earned vs given away
 
 The Stats tab opens with where the points actually went, for whichever scope you have selected:

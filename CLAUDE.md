@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.09.25c** (`js/version.js`).
+Current version: **2026.09.26a** (`js/version.js`).
 
 ## What this is
 
@@ -794,6 +794,34 @@ Display notes:
 
 Still not tracked, and out of scope by choice: opponent stats beyond these two team events. `oppPoint`
 means "they won the rally and we did not record why", not a claim about how.
+
+## One button per set, not "This Set" (2026.09.26a)
+
+The scope row used to read `This Set | Match | Season`, where "this" meant the set in play and there
+was **no way at all** to look at an earlier one — a three-set match had two thirds of its detail
+unreachable from the tab built to show it. Now each set of the open match gets its own button.
+
+The only real design question was whether to keep the follow-the-live-set behaviour, which is
+genuinely useful between points and is the whole reason the old button said "this". Both:
+
+- **`view.setId === null` means "follow the set in play"**, and that is the default. Tapping an
+  earlier set pins it; tapping the live one clears the pin. So the tab keeps up with the match on its
+  own, and stops keeping up the moment you deliberately look backwards — which is exactly when being
+  yanked to set 3 would be infuriating.
+- **A stale pin is dropped on read**, not carried. `scopedSet()` clears `view.setId` when it no
+  longer resolves, so reopening an old match cannot silently land on its set 1.
+- **The live set carries a dot** (`.seg--live::after`). Without it a coach who had pinned set 1 has
+  nothing on screen saying which set the buttons are counting.
+
+Layout: `.seg` is `flex: 1`, so "S2" would claim the same width as "Season". `.seg--num` is
+`flex: 0 0 auto`, which keeps a best-of-five (S1–S5 + Match + Season) on one row at 393px — asserted
+in the browser by comparing the buttons' `top`, since a wrap here is invisible to any DOM assertion.
+
+With no match open there is one disabled `Set` button rather than an empty gap: the gap reads as a
+bug, the greyed button reads as "nothing to show yet".
+
+The CSV filename gained the set number (`stats-jv-set2-…`) — three exports from one match otherwise
+land on each other in the downloads folder.
 
 ## Sortable stat columns
 
