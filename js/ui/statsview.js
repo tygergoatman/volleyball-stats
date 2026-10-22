@@ -1,6 +1,8 @@
 /** Stat tables: per set, per match, and season totals. */
 
 import {
+    CATEGORIES,
+    COLUMNS,
     aggregate,
     aggregateMatch,
     aggregateSeason,
@@ -8,6 +10,7 @@ import {
     breakdownTotals,
     derive,
     emptyLine,
+    hasData,
     formatAvg,
     formatPct,
     rotationBreakdown,
@@ -31,66 +34,6 @@ const view = { scope: 'set', setId: null, category: 'pass', teamId: null, sort: 
 
 /** The player column's heading, which sorts by jersey number rather than a stat. */
 const PLAYER_COLUMN = 'Player';
-
-const CATEGORIES = [
-    { key: 'pass', label: 'Pass' },
-    { key: 'attack', label: 'Attack' },
-    { key: 'set', label: 'Set' },
-    { key: 'serve', label: 'Serve' },
-    { key: 'def', label: 'Block / Dig' },
-    { key: 'fault', label: 'Faults' },
-];
-
-/**
- * Column definitions per category. `read` receives the raw line and its derived
- * metrics; `key` marks the column the table sorts by (descending).
- */
-const COLUMNS = {
-    pass: [
-        { label: 'Att', read: (line) => line.pass.att },
-        { label: 'Avg', read: (line, d) => formatAvg(d.passAvg), sort: (line, d) => d.passAvg ?? -1, primary: true },
-        { label: '3', read: (line) => line.pass.three },
-        { label: '2', read: (line) => line.pass.two },
-        { label: '1', read: (line) => line.pass.one },
-        { label: '.5', read: (line) => line.pass.half },
-        { label: '0', read: (line) => line.pass.zero, bad: true },
-    ],
-    attack: [
-        { label: 'K', read: (line) => line.attack.kills, primary: true },
-        { label: 'A', read: (line) => line.attack.inPlay },
-        { label: '0', read: (line) => line.attack.errors, bad: true },
-        { label: 'Att', read: (line) => line.attack.att },
-        { label: 'Hit%', read: (line, d) => formatPct(d.hitPct), sort: (line, d) => d.hitPct ?? -9 },
-        { label: 'K%', read: (line, d) => formatPct(d.killPct) },
-    ],
-    set: [
-        { label: 'Att', read: (line) => line.set.att },
-        { label: 'Avg', read: (line, d) => formatAvg(d.setAvg), sort: (line, d) => d.setAvg ?? -1, primary: true },
-        { label: 'Err', read: (line) => line.set.errors, bad: true },
-    ],
-    serve: [
-        { label: 'Att', read: (line) => line.serve.att },
-        { label: 'Ace', read: (line) => line.serve.aces, primary: true },
-        { label: 'Err', read: (line) => line.serve.errors, bad: true },
-        { label: 'Ace%', read: (line, d) => formatPct(d.acePct) },
-        { label: 'Err%', read: (line, d) => formatPct(d.serveErrPct), bad: true },
-    ],
-    def: [
-        { label: 'Dig', read: (line) => line.dig.digs, primary: true },
-        { label: 'Solo', read: (line) => line.block.solo },
-        { label: 'Asst', read: (line) => line.block.assist },
-        { label: 'BErr', read: (line) => line.block.errors, bad: true },
-    ],
-    fault: [
-        { label: 'Net', read: (line) => line.fault.net, bad: true, primary: true },
-        { label: 'Under', read: (line) => line.fault.under, bad: true },
-        { label: 'Double', read: (line) => line.fault.double, bad: true },
-        // Not flagged `bad`: it is not held against her, and colouring it red
-        // alongside the three that are would say it is.
-        { label: 'Whose?', read: (line) => line.fault.whose },
-        { label: 'All Err', read: (line, d) => d.errorsCommitted, sort: (line, d) => d.errorsCommitted, bad: true },
-    ],
-};
 
 /**
  * Whose season is on screen: the team you picked here, or the one in play.
@@ -548,24 +491,6 @@ function sortValue(column, row) {
     const raw = column.sort ? column.sort(row.line, row.derived) : column.read(row.line, row.derived);
     const number = typeof raw === 'number' ? raw : Number.parseFloat(raw);
     return Number.isNaN(number) ? -Infinity : number;
-}
-
-/** True when a player has at least one recorded action in this line. */
-function hasData(line) {
-    return (
-        line.pass.att > 0 ||
-        line.attack.att > 0 ||
-        line.set.att > 0 ||
-        line.serve.att > 0 ||
-        line.dig.digs > 0 ||
-        line.block.solo > 0 ||
-        line.block.assist > 0 ||
-        line.block.errors > 0 ||
-        line.fault.net > 0 ||
-        line.fault.under > 0 ||
-        line.fault.double > 0 ||
-        line.fault.whose > 0
-    );
 }
 
 /* --------------------------------------------------------------- rotations */

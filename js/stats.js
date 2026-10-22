@@ -446,4 +446,100 @@ export function formatAvg(value) {
     return value === null || value === undefined ? '—' : value.toFixed(2);
 }
 
+/**
+ * True when a player has at least one recorded action in this line.
+ *
+ * The rule for "is this player on this table at all". Shared with the report so
+ * a squad member who sat out a set is absent from both, rather than present in
+ * one as a row of zeroes.
+ */
+export function hasData(line) {
+    return (
+        line.pass.att > 0 ||
+        line.attack.att > 0 ||
+        line.set.att > 0 ||
+        line.serve.att > 0 ||
+        line.dig.digs > 0 ||
+        line.block.solo > 0 ||
+        line.block.assist > 0 ||
+        line.block.errors > 0 ||
+        line.fault.net > 0 ||
+        line.fault.under > 0 ||
+        line.fault.double > 0 ||
+        line.fault.whose > 0
+    );
+}
+
+/* ------------------------------------------------------------ the table */
+
+/**
+ * The stat families, and the columns each one shows.
+ *
+ * **These live here rather than in the view** because two different pages now
+ * draw this table — the Stats tab and the shareable report — and a column
+ * defined twice is a column that will eventually disagree with itself. They are
+ * pure data and pure functions, so this module stays DOM-free and testable.
+ *
+ * `read` receives the raw line and its derived metrics and returns what the
+ * cell shows; `sort` returns the value to rank by when the displayed text is
+ * formatted (so "—" sorts last instead of parsing as something). `primary`
+ * marks the column a family sorts by until told otherwise, and `bad` colours a
+ * count red — reserved for numbers held against the player.
+ */
+export const CATEGORIES = [
+    { key: 'pass', label: 'Pass' },
+    { key: 'attack', label: 'Attack' },
+    { key: 'set', label: 'Set' },
+    { key: 'serve', label: 'Serve' },
+    { key: 'def', label: 'Block / Dig' },
+    { key: 'fault', label: 'Faults' },
+];
+
+export const COLUMNS = {
+    pass: [
+        { label: 'Att', read: (line) => line.pass.att },
+        { label: 'Avg', read: (line, d) => formatAvg(d.passAvg), sort: (line, d) => d.passAvg ?? -1, primary: true },
+        { label: '3', read: (line) => line.pass.three },
+        { label: '2', read: (line) => line.pass.two },
+        { label: '1', read: (line) => line.pass.one },
+        { label: '.5', read: (line) => line.pass.half },
+        { label: '0', read: (line) => line.pass.zero, bad: true },
+    ],
+    attack: [
+        { label: 'K', read: (line) => line.attack.kills, primary: true },
+        { label: 'A', read: (line) => line.attack.inPlay },
+        { label: '0', read: (line) => line.attack.errors, bad: true },
+        { label: 'Att', read: (line) => line.attack.att },
+        { label: 'Hit%', read: (line, d) => formatPct(d.hitPct), sort: (line, d) => d.hitPct ?? -9 },
+        { label: 'K%', read: (line, d) => formatPct(d.killPct) },
+    ],
+    set: [
+        { label: 'Att', read: (line) => line.set.att },
+        { label: 'Avg', read: (line, d) => formatAvg(d.setAvg), sort: (line, d) => d.setAvg ?? -1, primary: true },
+        { label: 'Err', read: (line) => line.set.errors, bad: true },
+    ],
+    serve: [
+        { label: 'Att', read: (line) => line.serve.att },
+        { label: 'Ace', read: (line) => line.serve.aces, primary: true },
+        { label: 'Err', read: (line) => line.serve.errors, bad: true },
+        { label: 'Ace%', read: (line, d) => formatPct(d.acePct) },
+        { label: 'Err%', read: (line, d) => formatPct(d.serveErrPct), bad: true },
+    ],
+    def: [
+        { label: 'Dig', read: (line) => line.dig.digs, primary: true },
+        { label: 'Solo', read: (line) => line.block.solo },
+        { label: 'Asst', read: (line) => line.block.assist },
+        { label: 'BErr', read: (line) => line.block.errors, bad: true },
+    ],
+    fault: [
+        { label: 'Net', read: (line) => line.fault.net, bad: true, primary: true },
+        { label: 'Under', read: (line) => line.fault.under, bad: true },
+        { label: 'Double', read: (line) => line.fault.double, bad: true },
+        // Not flagged `bad`: it is not held against her, and colouring it red
+        // alongside the three that are would say it is.
+        { label: 'Whose?', read: (line) => line.fault.whose },
+        { label: 'All Err', read: (line, d) => d.errorsCommitted, sort: (line, d) => d.errorsCommitted, bad: true },
+    ],
+};
+
 export { STAT_BY_CODE };

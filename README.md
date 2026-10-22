@@ -637,6 +637,30 @@ the season already on the device, with no file needed.
 **Nothing is uploaded.** The page is published, the data never is — the file is read inside your
 browser and stays there, exactly like the roster.
 
+## Sharing a season with other coaches
+
+At the bottom of the dashboard: **Share this season**. It builds **one HTML file** containing the
+season — the points split, the full stat tables, rotation scoring and the season charts — for the
+whole season, every match, and every set within it.
+
+Send it however you send anything: email, text, AirDrop, a thumb drive. Whoever gets it
+double-clicks it and it opens in their browser. **No app, no account, no internet** — it works on a
+plane. They can switch between matches and sets and sort the tables exactly as you can, because the
+whole thing is in the file.
+
+It is a snapshot, not a link: the numbers are whatever they were when you built it, and rebuilding
+after another match gives you a new file. Nothing is uploaded — the file is assembled in your
+browser and handed straight to you.
+
+**Two buttons, and the difference is names.**
+
+- **Build report (with names)** — for coaches, families, anyone you'd hand a stat sheet to. The file
+  says on its own front page that it carries names, so whoever opens it next knows too.
+- **Build report (numbers only)** — jersey numbers and nothing else. No names are anywhere in the
+  file, so this one is safe to post in a team group, hand to a tournament, or put on a website.
+
+Pick deliberately each time. There is no remembered setting to misread, which is the point.
+
 ## The whiteboard
 
 **☰ → Whiteboard.** A landscape scratch surface for a timeout. Mid-set it opens on your actual six in
@@ -678,6 +702,7 @@ volleyball-stats/
 │   ├── libero.js           libero tracking sheet and sub counting        (pure)
 │   ├── plan.js             planned subs, and which are due right now     (pure)
 │   ├── subring.js          what a press-and-hold offers, and what it does not (pure)
+│   ├── report.js           builds the standalone shareable report file
 │   ├── season.js           a season as a sequence of matches, for charting (pure)
 │   ├── trends.js           the dashboard page
 │   ├── stats.js            aggregation and derived metrics               (pure)

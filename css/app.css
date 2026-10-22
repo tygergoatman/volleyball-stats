@@ -3304,6 +3304,17 @@ body.wb-open {
     font-weight: 700;
 }
 
+.trends__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.trends__actions .btn {
+    flex: 1 1 220px;
+}
+
 .trends__file {
     display: grid;
     gap: 6px;

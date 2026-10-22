@@ -42,6 +42,7 @@ const SHELL = [
     './js/formations.js',
     './js/plan.js',
     './js/season.js',
+    './js/report.js',
     './js/subring.js',
     './js/ui/dom.js',
     './js/ui/chart.js',

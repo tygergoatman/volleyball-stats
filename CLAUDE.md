@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.09.26a** (`js/version.js`).
+Current version: **2026.10.22a** (`js/version.js`).
 
 ## What this is
 
@@ -18,23 +18,40 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 105 tests — see the warning below
+node --test "tests/*.test.js"                          # 178 tests, 5 known-stale — see below
 ```
 
-**The unit tests were lost and are not coming back on their own.** The remote working copy was
-wiped when its container was recycled, and the release zips — the only other copy — had `tests/`
-excluded from them, so 270 tests over the pure modules are gone. The app source survived because
-the owner still had the zip. Two consequences:
+**The test suite was lost once, and partly came back.** The remote working copy was wiped when its
+container was recycled, and the release zips — the only other copy — had `tests/` excluded, so 270
+tests over the pure modules went with it. Rebuilding has been happening as code is touched.
 
-- **`tests/` now ships in the zip.** That is the fix; do not exclude it again to keep the archive
-  tidy. The zip is the backup, and a backup that omits the tests is how this happened.
-- Rebuilding is happening **as code is touched**, not as one sitting: `privacy.test.js` first because
-  it guards a hard constraint, then `model`, `store` and `stats` covering what 2026.09.12a and
-  2026.09.13a added, and `sw.test.js` because the SHELL guard it describes had itself been lost.
-  105 tests, against 270 before — treat a green run as "the recent work is covered", not "the app is
-  covered". Anything older than that is unguarded until someone writes it. The modules are
-  intact and well commented, but some of the lost tests encoded decisions made in conversation, and
-  those reasons live in this file rather than in the code.
+Then in 2026.10.22a the container was recycled **again**, and this time recovery was easy: the
+working copy was re-cloned from `tygergoatman/volleyball-stats`, the owner's own GitHub Pages repo.
+The app has no build step, so what is published *is* the source. Two things came out of that:
+
+- **The published repo is now the backup of record**, better than the zips, because it is whatever
+  the owner last installed. Re-clone it rather than asking them to re-upload anything.
+- **`match.test.js` and `teams.test.js` came back with it** — 61 of the lost tests, which had been
+  uploaded before the wipe and sat there unnoticed. Total is now 178.
+
+**Five of those 61 fail, and they are right to.** They encode rules the owner has since deliberately
+reversed, so they are stale rather than broken:
+
+| Failing test | Superseded by |
+| --- | --- |
+| `the stat sheet is ordered Pass, Set, Attack, Block, Serve` | the row order chosen for tap frequency |
+| `every row ends on its point-conceding button` | `Whose?` on the Fault row, which concedes nothing |
+| `a player can no longer be a setter and something else at once` | schema v4, positions are a list |
+| `an older record with only the flag set keeps its meaning` | same — the `isSetter` flag is gone |
+| `saved data from before the collapse migrates` | same |
+
+**Do not delete them without asking.** They are the only surviving record of what those rules used
+to be, and the owner has not yet been asked whether to retire them or rewrite them against today's
+behaviour. Until then, a "green run" means **173 passing and those five**, which is a worse signal
+than it looks — check the names, not just the count.
+
+Treat a green run as "the recent work is covered", not "the app is covered". Some of the still-lost
+tests encoded decisions made in conversation; those reasons live in this file rather than in code.
 
 **Three bugs in a row now have reproduced only in the installed app**, never in Chromium or device
 emulation: the drifting tab bar, then the tab bar covering content. A standalone PWA can have a layout
@@ -1137,6 +1154,68 @@ lineup or the rotation needs correcting, and silently redrawing would hide that.
 The Subs tab's Offence panel says which player the 5-1 is built around and warns
 when zero or two on-court players are tagged `S`. A derivation the user cannot
 see is one they cannot overrule.
+
+## The shareable report — `js/report.js` (2026.10.22a)
+
+Asked for when the season ended: *"a dashboard … that I could share with someone outside of Guild …
+review the stats with the other coaches."* The answer is **one self-contained HTML file**, built
+from the Trends page and handed over like any attachment.
+
+### Why a file rather than a page
+
+Everything else here is a published page with private data. That works because the only reader is
+the owner. The moment the reader is another school's coach, a page means **hosting minors' names**,
+which is the one thing this project will not do. A file inverts it: the owner decides who receives
+a copy, the recipient needs no account, and there is nothing to take down later.
+
+It also happens to be the most robust option for the actual setting — a laptop on a kitchen table,
+maybe without wifi. No install, no sign-in, no CDN, no service worker.
+
+### The app does the arithmetic; the report only draws it
+
+**Every number is computed at export time and baked in as a string.** The embedded viewer cannot
+recompute anything — it sorts rows by numbers it was handed and that is all. So a report found in
+an inbox next March still shows exactly what the Stats tab showed the day it was made, and no
+second implementation of volleyball maths exists to drift.
+
+This is why `CATEGORIES`, `COLUMNS` and `hasData` **moved out of `ui/statsview.js` into `stats.js`**
+in this release. Two pages now draw this table, and a column defined twice is a column that will
+eventually disagree with itself. `tests/report.test.js` re-derives a cell the long way through
+`COLUMNS[].read` and insists on the same string, so giving the export its own arithmetic fails.
+
+### Charts are rendered by the caller, not by `report.js`
+
+`report.js` is pure and DOM-free so it can be tested without a browser. But a chart must be drawn
+at the width it will occupy — the lesson `ui/chart.js` already carries — so `trends.js` calls the
+real chart module at `REPORT_WIDTH` (848px, the report's own content width) and passes the SVG in
+as markup. One source of chart code, 1:1 pixels on a laptop, and no stretched viewBox.
+
+### Names
+
+Two buttons, not a toggle. **A toggle has a current position you can misread**, and the difference
+between these two files is whose names are in them; two deliberate taps means you cannot hand over
+the wrong one by not having noticed a switch. The named copy carries a line on its own face saying
+it has names in it, because the file will outlive the conversation in which it was sent.
+
+`includeNames: false` substitutes jersey numbers at the point the data is built, so names are never
+in the file at all — not hidden by CSS, not sitting in the JSON. A test asserts each name's absence
+from the whole document rather than from the rendered table.
+
+### A name is text, never markup
+
+The recipient opens this from a Downloads folder, where a local file runs scripts with no origin to
+contain it. So: `<` is escaped inside the JSON island (a player called `</script>` would otherwise
+end the tag and render the rest of the season as HTML), U+2028/9 are escaped because they are line
+terminators to a JavaScript parser but legal inside JSON, and the viewer builds every node with
+`textContent`. The one `innerHTML` is the chart markup, which the app generated itself.
+
+A test feeds a roster containing `</script><img src=x onerror=…>` and asserts it survives as text.
+
+### Size
+
+~80KB for a four-match season, so a fifteen-match one lands around 200–300KB — an ordinary
+attachment. Precomputed cells are bulkier than raw lines would be, and that was the trade accepted
+for not shipping the arithmetic.
 
 ## The season dashboard — `trends.html` (2026.09.24b)
 

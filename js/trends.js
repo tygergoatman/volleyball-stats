@@ -27,7 +27,8 @@ import {
     shortDate,
 } from './season.js';
 import { barChart, legend, lineChart } from './ui/chart.js';
-import { el, mount } from './ui/dom.js';
+import { reportData, reportHtml } from './report.js';
+import { el, mount, shareFile } from './ui/dom.js';
 import { APP_VERSION } from './version.js';
 
 /** Where the season on screen came from, so the page can say so. */
@@ -118,6 +119,7 @@ function render() {
                   rotationPanel(matches),
                   playerPanel(store, team, matches, series),
                   seasonTable(store, team, matches),
+                  reportPanel(store, team, matches, series),
               ]),
     );
     drawCharts();
@@ -207,6 +209,91 @@ function header(store, teams, team, matches) {
                 view.store = null;
                 render();
             },
+        }),
+    ]);
+}
+
+/* ------------------------------------------------------- shareable report */
+
+/**
+ * Build a standalone HTML report of this team's season and hand it off.
+ *
+ * The charts are rendered *here* rather than in `report.js`, because a chart
+ * has to be drawn at the width it will occupy and only a browser knows that.
+ * `REPORT_WIDTH` is the report's own content width, so the SVG that lands in
+ * the file is 1:1 on a laptop rather than a stretched viewBox with the text
+ * scaled up — the mistake this dashboard already made once.
+ */
+const REPORT_WIDTH = 848;
+
+function seasonChartMarkup(series) {
+    const labels = series.map((point) => point.label);
+    const titles = series.map((point) => `${point.date} vs ${point.opponent}`);
+    const markup = {};
+
+    for (const metric of TEAM_METRICS) {
+        const format = metric.format ?? ((v) => (v === null ? '—' : String(Math.round(v))));
+        const lines = metric.parts
+            ? metric.parts.map((part) => ({
+                  key: part.key,
+                  label: part.label,
+                  values: series.map((point) => (point.played ? part.read(point) : null)),
+              }))
+            : [{ key: metric.key, label: metric.label, values: seriesValues(series, metric) }];
+
+        const svg = lineChart({ labels, series: lines, format, domain: metric.domain, titles, width: REPORT_WIDTH });
+        const key = metric.lowerIsBetter ? `${metric.label} (lower is better)` : metric.label;
+        markup[key] = svg.outerHTML + (lines.length > 1 ? legend(lines).outerHTML : '');
+    }
+    return markup;
+}
+
+async function shareReport(store, team, matches, series, includeNames) {
+    if (matches.length === 0) {
+        view.error = 'No matches to report on.';
+        return render();
+    }
+
+    const data = reportData(store, team, { includeNames, charts: seasonChartMarkup(series) });
+    const slug = `${team.name} ${store.state.season?.name ?? ''}`.trim().toLowerCase().replace(/\W+/g, '-');
+    const filename = `${slug || 'season'}-report${includeNames ? '' : '-numbers-only'}.html`;
+
+    await shareFile(filename, reportHtml(data, APP_VERSION), { mime: 'text/html', title: `${team.name} season report` });
+}
+
+/**
+ * The export, and the one sentence about it that matters.
+ *
+ * Two buttons rather than a toggle: a toggle has a current position you can
+ * misread, and the difference between these two files is whose names are in
+ * them. Making it two deliberate taps means you cannot hand over the wrong one
+ * by not having noticed a switch.
+ */
+function reportPanel(store, team, matches, series) {
+    return el('section.panel', {}, [
+        el('h2.panel__title', { text: 'Share this season' }),
+        el('p.trends__note', {
+            text:
+                'Builds one self-contained HTML file — these tables, the points split and the rotation scoring, ' +
+                'for the season and every match and set. It opens in any browser with no app, no account and no ' +
+                'internet, so you can email or message it to another coach.',
+        }),
+        el('div.trends__actions', {}, [
+            el('button.btn.btn--primary', {
+                type: 'button',
+                text: 'Build report (with names)',
+                onClick: () => shareReport(store, team, matches, series, true),
+            }),
+            el('button.btn.btn--ghost', {
+                type: 'button',
+                text: 'Build report (numbers only)',
+                onClick: () => shareReport(store, team, matches, series, false),
+            }),
+        ]),
+        el('p.trends__note', {
+            text:
+                'The file is built in this browser and nothing is uploaded. The version with names is for coaches ' +
+                'and families — the numbers-only one carries no names at all, so it is safe to post anywhere.',
         }),
     ]);
 }
