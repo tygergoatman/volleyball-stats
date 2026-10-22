@@ -169,6 +169,10 @@ function renderWelcome() {
                     'Use Roster → Data → Share backup on the phone to produce the file. ' +
                     'Nothing is uploaded: the file is read in this browser and stays there.',
             }),
+            el('a.btn.btn--ghost.btn--sm.trends__back', {
+                href: './index.html',
+                text: '← Back to the app',
+            }),
             el('p.trends__ver', { text: `v${APP_VERSION}` }),
         ]),
     );
@@ -202,6 +206,10 @@ function header(store, teams, team, matches) {
                     }),
                 ),
             ),
+        el('a.btn.btn--ghost.btn--sm.trends__back', {
+            href: './index.html',
+            text: '← Back to the app',
+        }),
         el('button.btn.btn--ghost.btn--sm', {
             type: 'button',
             text: 'Open another file',

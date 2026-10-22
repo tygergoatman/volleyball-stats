@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.10.22a** (`js/version.js`).
+Current version: **2026.10.22b** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 178 tests, 5 known-stale — see below
+node --test "tests/*.test.js"                          # 180 tests, all green
 ```
 
 **The test suite was lost once, and partly came back.** The remote working copy was wiped when its
@@ -34,21 +34,27 @@ The app has no build step, so what is published *is* the source. Two things came
 - **`match.test.js` and `teams.test.js` came back with it** — 61 of the lost tests, which had been
   uploaded before the wipe and sat there unnoticed. Total is now 178.
 
-**Five of those 61 fail, and they are right to.** They encode rules the owner has since deliberately
-reversed, so they are stale rather than broken:
+**Five of those 61 failed, and were rewritten in 2026.10.22b** rather than deleted. Each asserted a
+rule the owner had since deliberately reversed, so each was retitled and re-pointed at the rule that
+replaced it — the migration paths they covered are still live code that nothing else touches:
 
-| Failing test | Superseded by |
+| Was | Now |
 | --- | --- |
-| `the stat sheet is ordered Pass, Set, Attack, Block, Serve` | the row order chosen for tap frequency |
-| `every row ends on its point-conceding button` | `Whose?` on the Fault row, which concedes nothing |
-| `a player can no longer be a setter and something else at once` | schema v4, positions are a list |
-| `an older record with only the flag set keeps its meaning` | same — the `isSetter` flag is gone |
-| `saved data from before the collapse migrates` | same |
+| `the stat sheet is ordered Pass, Set, Attack, Block, Serve` | the same five in the same order, with `fault` appended |
+| `every row ends on its point-conceding button` | the same, for the five scoring rows; a second test states why Faults is all-red |
+| `a player can no longer be a setter and something else at once` | `an explicit position wins over the old setter flag beside it`, asserting `positions` |
+| `an older record with only the flag set keeps its meaning` | unchanged in substance, asserting `positions: ['S']` |
+| `saved data from before the collapse migrates` | same, plus the schema is left at 4 |
 
-**Do not delete them without asking.** They are the only surviving record of what those rules used
-to be, and the owner has not yet been asked whether to retire them or rewrite them against today's
-behaviour. Until then, a "green run" means **173 passing and those five**, which is a worse signal
-than it looks — check the names, not just the count.
+Two tests were **added** while doing it: one pinning that a player may hold several positions (the
+thing v4 exists to allow, and what the first of those used to forbid), and one on the Faults row.
+
+**One thing surfaced and was left alone.** A legacy roster file carrying both `position: 'OH'` and
+`isSetter: true` migrates to `['OH']` — the flag is dropped. That was right when a player had one
+position; under v4 the honest answer is arguably `['OH', 'S']`, and it matters because the 5-1
+anchoring finds the setter by her `S` tag. No live data has that shape (`roster.json` lists no
+players, and the on-device v3→v4 path does keep the flag), so it was documented in the test rather
+than changed. Ask before changing it.
 
 Treat a green run as "the recent work is covered", not "the app is covered". Some of the still-lost
 tests encoded decisions made in conversation; those reasons live in this file rather than in code.
@@ -1154,6 +1160,65 @@ lineup or the rotation needs correcting, and silently redrawing would hide that.
 The Subs tab's Offence panel says which player the 5-1 is built around and warns
 when zero or two on-court players are tagged `S`. A derivation the user cannot
 see is one they cannot overrule.
+
+## "Check for update" did nothing for ten minutes (2026.10.22b)
+
+Reported as *"I added the code, went into the app on my phone and used the check for updates button,
+but the app version hasn't updated."* It was not the upload and not the phone: the published files
+were correct the whole time, and the app healed itself ten minutes later.
+
+**`fetch()` inside a service worker honours the HTTP cache.** GitHub Pages serves
+`Cache-Control: max-age=600`, so `networkFirst` was answered from the browser's own cache without a
+network trip — and then wrote that stale response into the offline cache as if it were fresh.
+"Network-first" silently meant "HTTP-cache-first" for ten minutes after any load, which is exactly
+the window in which somebody presses Check for update. Every fetch now passes `cache: 'no-store'`,
+including the precache, which used `cache.add` and had the same hole.
+
+**This is why it was worth reproducing rather than reasoning about.** The worker *looked* correct —
+network-first with a cache fallback is the right design, and the code implements it. The defect was
+one layer below, in what `fetch` means by default. `scratchpad/pages_server.py` serves a tree with
+Pages' real headers and `update-repro.mjs` installs the old build, swaps the files underneath it and
+presses the button:
+
+| Cache header | Before the fix | After |
+| --- | --- | --- |
+| `max-age=600` (Pages) | 4 presses **and** a reload, still stale | updates on the first press |
+| `max-age=2` | updates on the first press | updates on the first press |
+
+The second row is what made the diagnosis certain: same code, same steps, only the header different.
+
+**`updateViaCache` was a red herring.** It defaults to `'imports'`, which already refetches the
+worker script itself on every check — so the worker *was* updating; it was the files it then served
+that were stale. `'none'` is set in `app.js` anyway, for anything it might one day import. Worth
+recording because the obvious fix for "my service worker won't update" is the wrong one here.
+
+### Two things the fix had to not break
+
+- **Offline.** `no-store` bypasses the HTTP cache, not the Cache Storage the worker manages, so the
+  gym case is untouched — asserted by `offline-check.mjs`, which installs the shell, goes offline
+  and boots the app and the dashboard.
+- **Deep links.** Found while testing the above, and pre-existing: a navigation passed `./index.html`
+  as its *only* cache fallback, so offline, `trends.html` served the capture app under the
+  dashboard's URL. It had never been reachable before this release. `fromCache` now tries the
+  requested page first and the shell second.
+
+## Getting to the dashboard (2026.10.22b)
+
+`trends.html` shipped in 2026.09.24b with **no link to it from anywhere** — reachable only by typing
+the URL. It stayed that way through the report feature in 2026.10.22a, so the owner went looking for
+the export button in the app and could not find it. The feature was effectively unshipped for a
+month.
+
+Two ways in now, chosen for where somebody is standing when they want it: the **Stats tab's export
+panel**, beside the CSV buttons, because that is where you go to get stats out; and the **☰ matches
+menu**, beside the whiteboard, which is this app's shelf for pages that are not tabs.
+
+Both are `<a href>` rather than scripted buttons, so they long-press, open in a new tab and leave a
+history entry. `a.btn` in `app.css` makes a link wear the button's clothes.
+
+**And a way back.** The app is `display: standalone`, so there is no address bar to escape through
+once you have navigated away. `trends.html` now carries a back link in both its header and its
+welcome screen.
 
 ## The shareable report — `js/report.js` (2026.10.22a)
 

@@ -177,6 +177,15 @@ export function renderStats(root, store) {
             el('p.panel__hint', {
                 text: 'One row per player per match, with the date and opponent in the row — the shape a spreadsheet can chart. The season dashboard reads a full backup instead.',
             }),
+            // Where someone goes looking to get stats out of the app, which is
+            // where they were going looking for the shareable report.
+            el('a.btn.btn--ghost', {
+                href: './trends.html',
+                text: 'Open the season dashboard →',
+            }),
+            el('p.panel__hint', {
+                text: 'Charts across the season, and Share this season — one HTML file of these stats you can send to another coach.',
+            }),
         ]),
     );
     return root;

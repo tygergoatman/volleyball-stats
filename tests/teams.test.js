@@ -432,10 +432,10 @@ test('a v1 blob with a flat roster still migrates', () => {
 
 /* ------------------------------------------------- stat sheet ordering */
 
-test('the stat sheet is ordered Pass, Set, Attack, Block, Serve', () => {
+test('the stat sheet is ordered Pass, Set, Attack, Block, Serve, with Faults last', () => {
     assert.deepEqual(
         STAT_GROUPS.map((g) => g.key),
-        ['pass', 'set', 'attack', 'block', 'serve'],
+        ['pass', 'set', 'attack', 'block', 'serve', 'fault'],
     );
 });
 
@@ -449,14 +449,35 @@ test('dig sits in the pass row, keeps the rally alive, and is not a dig group', 
     assert.ok(!STAT_GROUPS.some((g) => g.key === 'dig'));
 });
 
-test('every row ends on its point-conceding button, so all the red sits right', () => {
-    for (const group of STAT_GROUPS) {
+test('every scoring row ends on its point-conceding button, so all the red sits right', () => {
+    // Faults is excluded by nature rather than by exception: see below.
+    for (const group of STAT_GROUPS.filter((g) => g.key !== 'fault')) {
         const last = group.options.at(-1);
         assert.equal(last.point, 'them', `${group.label} should end on the error button`);
 
         const earlierErrors = group.options.slice(0, -1).filter((o) => o.point === 'them');
         assert.deepEqual(earlierErrors, [], `${group.label} has an error button out of place`);
     }
+});
+
+test('the Faults row is the exception, because every button on it concedes', () => {
+    // The rule above exists so the one red button sits at the end of each row
+    // and the thumb learns where it is. The Faults row has nothing else *in*
+    // it, so the rule cannot apply — and an all-red row is correct there, not
+    // a layout mistake somebody should "fix" by moving a button.
+    const fault = STAT_GROUPS.find((g) => g.key === 'fault');
+    assert.deepEqual(
+        fault.options.map((o) => o.point),
+        fault.options.map(() => 'them'),
+    );
+
+    // `Whose?` included: a ball nobody called still hands over the point. What
+    // makes it different is that the point is not charged to the player it is
+    // tagged against — `derive().errorsCommitted` leaves it out — so it is the
+    // one option on this row that is not held against anybody.
+    const whose = fault.options.find((o) => o.code === 'whoseBall');
+    assert.equal(whose.point, 'them', 'it costs the rally');
+    assert.equal(whose.charge, 'team', 'but it is charged to the team, not the player');
 });
 
 test('a dig counts as a dig, not toward the passing average', () => {
@@ -504,19 +525,32 @@ test('setter and libero are read from position, not a separate flag', () => {
     assert.equal(isLibero(store.player('c')), false);
 });
 
-test('a player can no longer be a setter and something else at once', () => {
+/*
+ * These three were written when a player had one `position` string and an
+ * `isSetter` boolean beside it. Schema v4 replaced both with `positions`, a
+ * list, so a player can be S/OH — which is the opposite of what the first of
+ * these used to assert. What they are really guarding is the *migration*: old
+ * records still have to arrive meaning what they meant, and that has not
+ * changed. Rewritten against the list rather than deleted, because the
+ * migration is still live code and nothing else covers it.
+ */
+
+test('an explicit position wins over the old setter flag beside it', () => {
     const store = new Store(new MemoryStorage());
     store.applyRosterFile({
         version: 2,
         teams: [{ id: 'jv', name: 'JV' }],
-        // The old shape allowed this contradiction; position now decides.
+        // The old shape allowed this contradiction. The stated position wins
+        // and the flag is dropped — note that v4 *could* now keep both as
+        // ['OH', 'S'], and deliberately does not.
         players: [{ id: 'x', number: '1', name: 'Contradiction', position: 'OH', isSetter: true, teams: ['jv'] }],
     });
 
     const player = store.player('x');
-    assert.equal(player.position, 'OH', 'the stated position wins');
+    assert.deepEqual(player.positions, ['OH'], 'the stated position wins');
     assert.equal(isSetter(player), false);
-    assert.equal(player.isSetter, undefined, 'the redundant flag is not carried forward');
+    assert.equal(player.position, undefined, 'the scalar field is not carried forward');
+    assert.equal(player.isSetter, undefined, 'and neither is the redundant flag');
 });
 
 test('an older record with only the flag set keeps its meaning', () => {
@@ -530,9 +564,10 @@ test('an older record with only the flag set keeps its meaning', () => {
         ],
     });
 
-    assert.equal(store.player('s').position, 'S', 'the flag becomes the position');
-    assert.equal(store.player('l').position, 'L');
+    assert.deepEqual(store.player('s').positions, ['S'], 'the flag becomes the position');
+    assert.deepEqual(store.player('l').positions, ['L']);
     assert.equal(isSetter(store.player('s')), true);
+    assert.equal(isLibero(store.player('l')), true);
 });
 
 test('saved data from before the collapse migrates', () => {
@@ -548,8 +583,26 @@ test('saved data from before the collapse migrates', () => {
     );
 
     const store = new Store(storage);
-    assert.equal(store.player('x').position, 'S');
+    assert.deepEqual(store.player('x').positions, ['S']);
     assert.equal(isSetter(store.player('x')), true);
+    assert.equal(store.state.version, 4, 'and the file is left at the current schema');
+});
+
+test('a player can hold more than one position, which is the point of the list', () => {
+    // The rule the first test above used to assert — one position, exclusively
+    // — is exactly what v4 exists to undo. Guarded here so it cannot quietly
+    // come back.
+    const store = new Store(new MemoryStorage());
+    store.applyRosterFile({
+        version: 2,
+        teams: [{ id: 'jv', name: 'JV' }],
+        players: [{ id: 'y', number: '7', name: 'Swing', positions: ['S', 'OH'], teams: ['jv'] }],
+    });
+
+    const player = store.player('y');
+    assert.deepEqual(player.positions, ['S', 'OH']);
+    assert.equal(isSetter(player), true, 'she sets');
+    assert.equal(isLibero(player), false);
 });
 
 /* -------------------------------------------------- sharing one match */

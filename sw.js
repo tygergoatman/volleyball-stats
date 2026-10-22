@@ -13,6 +13,20 @@
  *
  * CACHE_NAME no longer needs bumping to ship an update. It exists only to
  * invalidate everything at once if the cached shape ever needs a clean break.
+ *
+ * **Every fetch here bypasses the HTTP cache**, and that is load-bearing rather
+ * than belt-and-braces. GitHub Pages serves with `Cache-Control: max-age=600`,
+ * so a plain `fetch()` is answered from the browser's own cache for ten minutes
+ * without touching the network — and this worker would then write that stale
+ * response back into the offline cache as if it were current. "Network-first"
+ * silently meant "HTTP-cache-first", and a freshly published update was
+ * invisible for ten minutes no matter how many times you pressed Check for
+ * update. Reproduced and fixed in 2026.10.22b.
+ *
+ * This file itself was never the problem — `updateViaCache` defaults to
+ * `'imports'`, so the browser already refetches the top-level worker script on
+ * every update check. `app.js` now passes `'none'` anyway, which extends the
+ * same rule to anything the worker might one day `importScripts`.
  */
 
 const CACHE_NAME = 'vbstats-v3';
@@ -66,8 +80,13 @@ self.addEventListener('install', (event) => {
             // and leave the app with no offline copy at all.
             .then((cache) =>
                 Promise.all(
+                    // `cache.add` would fetch through the HTTP cache, which is
+                    // how a brand-new worker ends up precaching the files the
+                    // old one was already serving.
                     SHELL.map((path) =>
-                        cache.add(path).catch((error) => console.warn('Precache skipped', path, error)),
+                        fetch(path, { cache: 'no-store' })
+                            .then((response) => (response.ok ? cache.put(path, response) : null))
+                            .catch((error) => console.warn('Precache skipped', path, error)),
                     ),
                 ),
             )
@@ -94,9 +113,20 @@ self.addEventListener('message', (event) => {
  * network is too slow to be useful. Successful responses refresh the cache.
  */
 function networkFirst(request, fallbackKey = request) {
-    const fromCache = () => caches.match(fallbackKey, { ignoreSearch: true });
+    /**
+     * The page that was asked for, and only then the shell.
+     *
+     * A navigation passes `./index.html` as the fallback so an unvisited deep
+     * link still opens the app rather than the browser's dinosaur. Checking
+     * the cache for the requested page *first* matters now that the app links
+     * to `trends.html`: offline, the fallback alone served the capture app
+     * under the dashboard's URL.
+     */
+    const fromCache = async () =>
+        (await caches.match(request, { ignoreSearch: true })) ??
+        (await caches.match(fallbackKey, { ignoreSearch: true }));
 
-    const network = fetch(request).then((response) => {
+    const network = fetch(request, { cache: 'no-store' }).then((response) => {
         if (response.ok && new URL(request.url).origin === self.location.origin) {
             const copy = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));

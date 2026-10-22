@@ -753,6 +753,19 @@ button:disabled {
     text-align: center;
 }
 
+/*
+ * A link wearing the button's clothes, for the two places that leave the app
+ * for `trends.html`. It has to be an <a> rather than a scripted button so it
+ * behaves like a link — long-press, open in a new tab, and a real history
+ * entry to come back through in a standalone PWA.
+ */
+a.btn {
+    display: flex;
+    width: 100%;
+    text-decoration: none;
+    color: inherit;
+}
+
 .btn--sm {
     min-height: 36px;
     padding: 6px 12px;
@@ -3313,6 +3326,12 @@ body.wb-open {
 
 .trends__actions .btn {
     flex: 1 1 220px;
+}
+
+/* Sized to its text: it is an escape hatch, not the point of the page. */
+.trends__back {
+    width: auto;
+    align-self: flex-start;
 }
 
 .trends__file {

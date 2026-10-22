@@ -614,9 +614,12 @@ out does not move the badge.
 
 ## The season dashboard
 
-Open **`trends.html`** — the same address as the app with `trends.html` on the end — on a laptop or
-tablet. It is a reading page, not a capture page: no tab bar, nothing that can disturb a match in
-progress.
+**Stats tab → Open the season dashboard**, at the bottom under the CSV buttons. It is also in the
+**☰** menu as *Season dashboard*, next to the whiteboard. Both open `trends.html` — the same
+address as the app with `trends.html` on the end — which you can bookmark on a laptop or tablet.
+There is a **← Back to the app** link on it to come back.
+
+It is a reading page, not a capture page: no tab bar, nothing that can disturb a match in progress.
 
 It answers **how did the season go, match by match**:
 
@@ -639,8 +642,8 @@ browser and stays there, exactly like the roster.
 
 ## Sharing a season with other coaches
 
-At the bottom of the dashboard: **Share this season**. It builds **one HTML file** containing the
-season — the points split, the full stat tables, rotation scoring and the season charts — for the
+**Stats tab → Open the season dashboard**, then scroll to the bottom: **Share this season**.
+It builds **one HTML file** containing the season — the points split, the full stat tables, rotation scoring and the season charts — for the
 whole season, every match, and every set within it.
 
 Send it however you send anything: email, text, AirDrop, a thumb drive. Whoever gets it

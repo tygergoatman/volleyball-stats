@@ -131,6 +131,15 @@ const actions = {
                     openWhiteboard(store);
                 },
             }),
+            // The dashboard shipped with no way in but typing its URL, which
+            // is the same as not shipping it. It leaves the app rather than
+            // opening over it: it is a separate page by design, and must not
+            // be reachable from inside a match in a way that feels like a tab.
+            el('a.btn.btn--ghost', {
+                href: './trends.html',
+                text: '▤ Season dashboard',
+                onClick: () => closeSheet(),
+            }),
             ...matches.map((match) => {
                 // The set count was the same for every match on the list and
                 // told you nothing you wanted. How it went is the reason you
@@ -365,7 +374,11 @@ if ('serviceWorker' in navigator) {
 
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register('./sw.js');
+            // The default, 'imports', already refetches sw.js itself on every
+            // update check; 'none' extends that to anything it imports. The
+            // ten-minute staleness fixed in 2026.10.22b was in the worker's
+            // own fetch handler, not here — see sw.js.
+            const registration = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
 
             // Look for a new version on launch and whenever the app comes back
             // to the foreground, which is when a coach would notice.
