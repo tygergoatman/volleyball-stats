@@ -3328,6 +3328,28 @@ body.wb-open {
     flex: 1 1 220px;
 }
 
+/*
+ * The GitHub sync block, inset inside the Data panel so it reads as a distinct
+ * subject — and so the names warning above it clearly does not apply to it.
+ */
+.syncbox {
+    margin-top: 14px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--us);
+    border-radius: 10px;
+    background: var(--surface-2);
+}
+
+.syncbox__title {
+    margin: 0 0 6px;
+    font-size: 14px;
+}
+
+.syncbox .form__row {
+    margin: 10px 0 0;
+}
+
 /* Sized to its text: it is an escape hatch, not the point of the page. */
 .trends__back {
     width: auto;

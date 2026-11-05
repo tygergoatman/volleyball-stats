@@ -4,7 +4,7 @@ Working memory for this project: the decisions that took a conversation to reach
 expensive to rediscover, plus what is still open. Written for whoever picks this up next, human or
 otherwise. [README.md](./README.md) is the user-facing description; this is the reasoning behind it.
 
-Current version: **2026.10.22b** (`js/version.js`).
+Current version: **2026.11.05b** (`js/version.js`).
 
 ## What this is
 
@@ -18,7 +18,7 @@ Single user in practice — one coach, one phone. Multi-coach sharing exists but
 
 ```sh
 cd volleyball-stats && python3 -m http.server 8099     # must be HTTP, not file://
-node --test "tests/*.test.js"                          # 180 tests, all green
+node --test "tests/*.test.js"                          # 200 tests, all green
 ```
 
 **The test suite was lost once, and partly came back.** The remote working copy was wiped when its
@@ -1161,7 +1161,78 @@ The Subs tab's Offence panel says which player the 5-1 is built around and warns
 when zero or two on-court players are tagged `S`. A derivation the user cannot
 see is one they cannot overrule.
 
-## "Check for update" did nothing for ten minutes (2026.10.22b)
+## Publishing a season through GitHub — `js/publish.js` (2026.11.05a)
+
+Asked for directly: *"strip out the names, just keep the numbers, and get me a backup I could put in
+GitHub so a data sync option could pull the data down."*
+
+**The privacy rule was never "no data in the repo" — it was "no names in the repo".** Everything
+else in a backup is jersey numbers and events, and numbers are already published in `roster.json`.
+So the rule that blocked sharing turns out to permit it, as long as the names stay on the phones.
+That is the whole idea: `season.json` is the season with names removed, committed beside
+`index.html`, and every phone pulls it.
+
+### Names are restored locally, never transmitted
+
+A phone that knows #7 is Nell keeps calling her Nell. A phone that does not shows `#7`. The pull
+**never overwrites a name**, which is what makes it safe for the owner to pull her own published
+season — otherwise the one coach with the roster would wipe it the first time she synced.
+`tests/publish.test.js` asserts exactly that, because it is the assumption everything else rests on.
+
+### An allowlist, not a denylist
+
+`PUBLISHED_PLAYER_KEYS` names the four fields allowed out. A field added next season called
+`nickname` or `parentEmail` is dropped by default rather than published because nobody thought to
+ban it — and a test asserts the list is exhaustive against a real player record, so adding a field
+to the app without deciding about it here fails the suite. Same shape as `privacy.test.js`'s
+`ALLOWED_PLAYER_KEYS`, deliberately.
+
+The central test is not "did we strip `name`" but **"does any name appear anywhere in the serialised
+file"**, checked against the whole string. Git history is permanent; a field we forgot to look at is
+the failure mode that matters.
+
+### What else stays behind, and why
+
+`playerOverrides` and `teamOverrides` can carry a name and are one device's opinion anyway;
+`rosterFile` is a cache that would go stale in the repo; `hiddenTeamIds` is one coach hiding Varsity
+on her phone, not a fact about the season; `activeMatchId` / `activeSetId` would **yank another
+coach's screen mid-set**.
+
+### Getting the file off the phone needs the share sheet (2026.11.05b)
+
+Shipped with a download button only, and the owner hit it immediately: *"I don't think it will let
+me share the json."* A browser download on a phone drops the file somewhere awkward and gives you
+no way to send it — and the phone is the device the season actually lives on, so the one export
+that mattered was the one that did not work.
+
+**The pattern was already in the panel directly above it.** `Share backup` uses `shareFile`, which
+opens the native share sheet and falls back to a download; `Save backup to this device` always
+downloads. Both exist because a phone wants the first and a laptop wants the second. The new
+buttons should have copied that pair on day one and instead copied half of it.
+
+`shareFile` already handles the fallback, so this is one button, not a branch. Worth noting for the
+next export anyone adds: **on this project a download-only button is a bug on a phone.**
+
+### It is a one-way pull, and that is not a limitation to fix
+
+GitHub Pages serves files; it does not accept them. There is no upload path and there is not going
+to be one. The season keeper commits, everyone else pulls. Anything else would need a server, which
+this project does not have and does not want.
+
+### The four merge rules
+
+1. **A local name always wins** — above.
+2. **Matches are added, never replaced.** A match already here by id is left alone, so a pull cannot
+   undo a correction made locally. Tested by correcting an event and pulling the pre-correction file.
+3. **Plans and colours are adopted only where this device has none.** Overwriting a coach's sub plan
+   from a file mid-season would be a nasty surprise.
+4. **The season name and the team in view are taken only by a phone with no matches of its own** —
+   one being seeded. The second half of that rule was found in the browser, not in a unit test:
+   `roster.json` defines MS/JV/Varsity, the Stats tab falls back to the first, so the co-coach pulled
+   a whole season and landed on **Middle School's empty table**. The data was right and the app
+   looked broken.
+
+## "Check for update" did nothing for ten minutes (2026.10.22b)## "Check for update" did nothing for ten minutes (2026.10.22b)
 
 Reported as *"I added the code, went into the app on my phone and used the check for updates button,
 but the app version hasn't updated."* It was not the upload and not the phone: the published files

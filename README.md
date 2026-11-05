@@ -640,6 +640,40 @@ the season already on the device, with no file needed.
 **Nothing is uploaded.** The page is published, the data never is — the file is read inside your
 browser and stays there, exactly like the roster.
 
+## Sharing a season between phones, through GitHub
+
+**Roster → Data → Share through GitHub.** This is how you and a co-coach stay on the same season
+without messaging files back and forth.
+
+1. **Share season.json** on the phone that has the season — it opens the share sheet, so you can
+   AirDrop or message it to yourself. (On a laptop, **Save season.json** drops it straight into
+   Downloads instead.)
+2. Commit that file to your repo, right next to `index.html` — same as uploading an app update.
+3. On any other phone: **Pull from GitHub**.
+
+**It carries jersey numbers, never names.** Everything else comes across in full: every match, every
+recorded stat, the sub plan and libero pairing, the 5-1 setting, your court colours. Names live on
+each phone — hers will show `#7` where yours shows `#7 Nell`, and she can type the names in once if
+she wants them.
+
+That is what makes it safe to commit. The repo is public and these are minors, so names never go in
+it. Numbers already do, in `roster.json`.
+
+**Pulling is safe to repeat.** It adds matches and players you don't have, and it will not:
+
+- overwrite a name you have typed
+- replace a match already on your phone, so a correction you made locally survives
+- touch your own sub plan
+
+So you can pull as often as you like, including on the phone the season came from.
+
+**It only goes one way.** GitHub serves files; it can't accept them. Whoever keeps the season
+commits `season.json` after a game, and everyone else pulls it down. If your co-coach scored a
+match, she saves `season.json` on her phone, you commit hers, and your pull picks it up.
+
+**If you want her to have the names too**, that's the full backup instead — Share backup → Replace
+everything from a file. See below.
+
 ## Sharing a season with other coaches
 
 **Stats tab → Open the season dashboard**, then scroll to the bottom: **Share this season**.
@@ -705,6 +739,7 @@ volleyball-stats/
 │   ├── libero.js           libero tracking sheet and sub counting        (pure)
 │   ├── plan.js             planned subs, and which are due right now     (pure)
 │   ├── subring.js          what a press-and-hold offers, and what it does not (pure)
+│   ├── publish.js          strips names for season.json, and pulls it back
 │   ├── report.js           builds the standalone shareable report file
 │   ├── season.js           a season as a sequence of matches, for charting (pure)
 │   ├── trends.js           the dashboard page

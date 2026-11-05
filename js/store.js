@@ -10,6 +10,7 @@
  * team removes a label, not people or the matches they played.
  */
 
+import { applyPublishedSeason, publishedJson } from './publish.js';
 import {
     DEFAULT_FORMAT,
     SCHEMA_VERSION,
@@ -1091,6 +1092,24 @@ export class Store {
         const parsed = JSON.parse(text);
         this.state = migrate(parsed);
         this.commit();
+    }
+
+    /**
+     * The season with every name stripped out, safe to commit to the public
+     * repository. See `js/publish.js` for what is left behind and why.
+     */
+    publishJson() {
+        return publishedJson(this.state);
+    }
+
+    /**
+     * Fold a published season file into this device, keeping local names.
+     *
+     * @returns {{matches: number, skipped: number, players: number, teams: number}}
+     */
+    pullPublished(text) {
+        const incoming = JSON.parse(text);
+        return this.update((state) => applyPublishedSeason(state, incoming));
     }
 
     /**

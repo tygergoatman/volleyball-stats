@@ -9,6 +9,7 @@
 
 import { POSITION_COLORS, ROSTER_POSITIONS, colorForPosition, playerLabel } from '../model.js';
 import { aggregateSeason, derive, formatAvg, formatPct } from '../stats.js';
+import { describePull } from '../publish.js';
 import { APP_VERSION } from '../version.js';
 import { el, mount, openSheet, closeSheet, toast, confirmDialog, downloadText, shareFile } from './dom.js';
 
@@ -747,6 +748,8 @@ function dataPanel(store) {
             text: 'Merge adds another coach’s matches to yours and leaves your own untouched — that is how you combine devices after a game. Replace wipes this device and restores the file exactly.',
         }),
         fileButton('Replace everything from a file', 'replace', store),
+
+        syncPanel(store),
         el('button.btn.btn--danger.btn--sm', {
             type: 'button',
             text: 'Erase all data',
@@ -764,6 +767,80 @@ function dataPanel(store) {
             },
         }),
         versionRow(store),
+    ]);
+}
+
+/**
+ * Publishing the season to the repository, and pulling it back.
+ *
+ * This sits inside the Data panel rather than beside it because it is the same
+ * subject — getting the season off one phone and onto another — and because
+ * the names warning above applies to the backup buttons but pointedly *not* to
+ * these two.
+ */
+function syncPanel(store) {
+    return el('div.syncbox', {}, [
+        el('h3.syncbox__title', { text: 'Share through GitHub (no names)' }),
+        el('p.panel__hint', {
+            text:
+                'Send season.json to yourself, commit it next to index.html, and every phone running the app ' +
+                'can pull the season down. Jersey numbers only — names stay on each phone and are matched up ' +
+                'locally, so this file is safe in a public repo.',
+        }),
+        el('div.form__row', {}, [
+            // Two ways out, the same pair as the backup buttons above and for
+            // the same reason: on a phone you want the share sheet (AirDrop,
+            // Messages, Drive), on a laptop you want it in Downloads where you
+            // can commit it. Shipping only the download made this unusable on
+            // the device the season actually lives on.
+            el('button.btn.btn--ghost', {
+                type: 'button',
+                text: 'Share season.json',
+                onClick: async () => {
+                    const result = await shareFile('season.json', store.publishJson(), {
+                        title: `${store.state.season.name} — season (no names)`,
+                    });
+                    if (result === 'shared') toast('Shared — commit it to your repo');
+                    else if (result === 'downloaded') toast('Downloaded — sharing is not available here');
+                },
+            }),
+            el('button.btn.btn--ghost', {
+                type: 'button',
+                text: 'Save season.json',
+                onClick: () => {
+                    downloadText('season.json', store.publishJson(), 'application/json');
+                    toast('season.json saved — commit it to your repo');
+                },
+            }),
+        ]),
+        el('div.form__row', {}, [
+            el('button.btn.btn--ghost', {
+                type: 'button',
+                text: 'Pull from GitHub',
+                onClick: async () => {
+                    toast('Checking…');
+                    try {
+                        // Same bypass as roster.json: a pull the coach asked
+                        // for must not be answered from a ten-minute cache.
+                        const response = await fetch('./season.json', { cache: 'no-store' });
+                        if (response.status === 404) {
+                            toast('No season.json published yet', 'warn');
+                            return;
+                        }
+                        if (!response.ok) throw new Error(`season.json responded ${response.status}`);
+                        toast(describePull(store.pullPublished(await response.text())));
+                    } catch (error) {
+                        console.warn('Pull failed', error);
+                        toast('Could not pull the season', 'warn');
+                    }
+                },
+            }),
+        ]),
+        el('p.panel__hint', {
+            text:
+                'Pulling adds matches and players you do not have. It never overwrites a name you have typed, ' +
+                'never replaces a match already on this phone, and never touches your own sub plan.',
+        }),
     ]);
 }
 
